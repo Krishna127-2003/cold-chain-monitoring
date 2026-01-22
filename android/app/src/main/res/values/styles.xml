@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ✅ This is used when app launches -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+
+        <!-- ✅ Pre-Android 12 -->
+        <item name="android:windowBackground">@android:color/white</item>
+
+        <!-- ✅ Android 12+ SplashScreen API -->
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+
+        <!-- ✅ After splash, go to NormalTheme -->
+        <item name="postSplashScreenTheme">@style/NormalTheme</item>
+    </style>
+
+    <!-- ✅ After splash -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+</resources>

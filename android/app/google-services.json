@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "653168096175",
+    "project_id": "cold-chain-monitor-v1",
+    "storage_bucket": "cold-chain-monitor-v1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:653168096175:android:09f6d178c56a94a5c1f55a",
+        "android_client_info": {
+          "package_name": "com.example.cold_chain_monitor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "653168096175-jujequ2873n1687cgubktsa5fd9t7nc9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cold_chain_monitor",
+            "certificate_hash": "fac478965a9f62fdaca6098d8827de39eb9c19d0"
+          }
+        },
+        {
+          "client_id": "653168096175-2onbtgkhlk1vj1nttgu1n3b5vlchec8k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxT26aNa1TI3x7PQxbiiKOS-Vr728k_-Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "653168096175-2onbtgkhlk1vj1nttgu1n3b5vlchec8k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
