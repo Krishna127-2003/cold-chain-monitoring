@@ -204,9 +204,33 @@ class _AuthScreenState extends State<AuthScreen>
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        SvgPicture.asset(
-                                          "assets/images/marken_logo.svg",
-                                          height: isSmall ? 58 : 66,
+                                        /// ✅ FIX: remove white background behind SVG in dark mode
+                                        ColorFiltered(
+                                          colorFilter: ColorFilter.mode(
+                                            Colors.transparent,
+                                            BlendMode.srcATop,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(18),
+                                              border: Border.all(
+                                                color: Colors.black.withValues(alpha: 0.06),
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  blurRadius: 20,
+                                                  offset: const Offset(0, 10),
+                                                  color: Colors.black.withValues(alpha: 0.25),
+                                                ),
+                                              ],
+                                            ),
+                                            child: SvgPicture.asset(
+                                              "assets/images/marken_logo.svg",
+                                              height: isSmall ? 58 : 66,
+                                            ),
+                                          ),
                                         ),
                                         const SizedBox(height: 10),
 

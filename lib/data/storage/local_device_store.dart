@@ -4,10 +4,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LocalDeviceStore {
   static const String _key = "saved_devices_v1";
 
-  /// ✅ In-memory cache (fast UI)
   static List<Map<String, dynamic>> _devices = [];
 
-  /// ✅ Call this ONCE in app start (main.dart) before UI
+  static String _extractId(Map<String, dynamic> d) {
+    return (d["deviceId"] ??
+            d["id"] ??
+            d["device_id"] ??
+            d["deviceID"] ??
+            "")
+        .toString()
+        .trim();
+  }
+
+  static String _extractType(Map<String, dynamic> d) {
+    return (d["equipmentType"] ?? "").toString().trim();
+  }
+
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
@@ -17,8 +29,13 @@ class LocalDeviceStore {
       return;
     }
 
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    _devices = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      _devices = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      _devices = [];
+      await prefs.remove(_key);
+    }
   }
 
   static List<Map<String, dynamic>> getDevices({String? equipmentType}) {
@@ -26,13 +43,28 @@ class LocalDeviceStore {
       return List<Map<String, dynamic>>.from(_devices);
     }
 
+    final type = equipmentType.trim();
+
     return _devices
-        .where((d) => d["equipmentType"] == equipmentType)
+        .where((d) => _extractType(d) == type)
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
   }
 
   static Future<void> addDevice(Map<String, dynamic> device) async {
+    final newId = _extractId(device);
+
+    // ✅ prevent duplicates by same deviceId inside same equipmentType
+    if (newId.isNotEmpty) {
+      final newType = _extractType(device);
+
+      _devices.removeWhere((d) {
+        final oldId = _extractId(d);
+        final oldType = _extractType(d);
+        return oldId == newId && oldType == newType;
+      });
+    }
+
     _devices.add(device);
     await _save();
   }
@@ -41,8 +73,14 @@ class LocalDeviceStore {
     required String equipmentType,
     required String deviceId,
   }) async {
-    _devices.removeWhere((d) =>
-        d["equipmentType"] == equipmentType && d["deviceId"] == deviceId);
+    final type = equipmentType.trim();
+    final id = deviceId.trim();
+
+    _devices.removeWhere((d) {
+      final dType = _extractType(d);
+      final dId = _extractId(d);
+      return dType == type && dId == id;
+    });
 
     await _save();
   }
@@ -51,18 +89,22 @@ class LocalDeviceStore {
     required String equipmentType,
     required List<String> deviceIds,
   }) async {
-    _devices.removeWhere((d) =>
-        d["equipmentType"] == equipmentType &&
-        deviceIds.contains((d["deviceId"] ?? "").toString()));
+    final type = equipmentType.trim();
+    final ids = deviceIds.map((e) => e.trim()).toSet();
+
+    _devices.removeWhere((d) {
+      final dType = _extractType(d);
+      final dId = _extractId(d);
+      return dType == type && ids.contains(dId);
+    });
 
     await _save();
   }
 
-  /// ✅ Deletes device from ALL types (global delete)
   static Future<void> deleteDeviceGlobal({required String deviceId}) async {
-    _devices.removeWhere(
-      (d) => (d["deviceId"] ?? "").toString() == deviceId,
-    );
+    final id = deviceId.trim();
+
+    _devices.removeWhere((d) => _extractId(d) == id);
 
     await _save();
   }

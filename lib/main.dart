@@ -11,15 +11,18 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Firebase init (ONLY ONCE)
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } else {
+      Firebase.app();
+    }
+  } catch (_) {}
 
-  // ✅ Local storage init
   await LocalDeviceStore.init();
 
-  // ✅ Theme Provider init
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
 

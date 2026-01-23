@@ -115,6 +115,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                           "equipmentType": equipmentType,
                           "department": _deptController.text.trim(),
                           "area": _areaController.text.trim(),
+                          "pin": _pinController.text.trim(), // ✅ REQUIRED (PIN saved)
                           "status": "NORMAL",
                           "lastUpdated": DateTime.now().toIso8601String(),
                         });

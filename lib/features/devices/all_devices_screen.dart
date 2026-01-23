@@ -90,9 +90,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
 
-    // ✅ Delete permanently
+    // ✅ FIX: Delete globally (because AllDevicesScreen has devices from ALL equipment types)
     for (final id in _selected) {
-      await LocalDeviceStore.deleteDevice(deviceId: id, equipmentType: '');
+      await LocalDeviceStore.deleteDeviceGlobal(deviceId: id);
     }
 
     // ✅ Exit edit mode and refresh
@@ -186,10 +186,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
           : FloatingActionButton(
               onPressed: () {
                 // ✅ Add device flow goes via Services screen
-                Navigator.pushNamedAndRemoveUntil(
+                Navigator.pushNamed(
                   context,
                   AppRoutes.services,
-                  (route) => false,
                 );
               },
               child: const Icon(Icons.add),
@@ -238,7 +237,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ✅ Checkbox in edit mode only
                               if (_isEditMode) ...[
                                 Checkbox(
                                   value: selected,
@@ -248,7 +246,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                 const SizedBox(width: 6),
                               ],
 
-                              // ✅ Icon
                               Container(
                                 height: 46,
                                 width: 46,
@@ -267,7 +264,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                               ),
                               const SizedBox(width: 12),
 
-                              // ✅ Details
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment:
@@ -286,8 +282,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-
-                                        // ✅ Status chip only in normal mode
                                         if (!_isEditMode)
                                           _StatusChip(status: status),
                                       ],
@@ -381,7 +375,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 }
 
-/// ✅ simple status chip (to avoid overflow issues)
 class _StatusChip extends StatelessWidget {
   final String status;
   const _StatusChip({required this.status});
