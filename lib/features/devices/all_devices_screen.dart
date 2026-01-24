@@ -1,11 +1,13 @@
 // ignore_for_file: deprecated_member_use, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../core/utils/responsive.dart';
 import '../../data/storage/local_device_store.dart';
 import '../../routes/app_routes.dart';
 import '../auth/google_auth_service.dart';
+import '../../data/api/android_data_api.dart';
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -19,6 +21,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   /// selected deviceIds
   final Set<String> _selected = {};
+
+  /// ✅ FIX A) Prevent multiple redirects loop
+  bool _didAutoRedirect = false;
+
+  Timer? _tempTimer;
+  Map<String, dynamic> _latestData = {};
+  bool _loadingTemps = false;
 
   void _toggleEditMode() {
     setState(() {
@@ -49,6 +58,65 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   void _clearSelection() {
     setState(() => _selected.clear());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _loadTemps();
+
+    // ✅ refresh every 60 seconds when saved devices screen is open
+    _tempTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _loadTemps();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tempTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadTemps() async {
+    setState(() => _loadingTemps = true);
+
+    final data = await AndroidDataApi.fetchLatest();
+
+    if (!mounted) return;
+
+    setState(() {
+      _latestData = data ?? {};
+      _loadingTemps = false;
+    });
+  }
+
+  /// ✅ ONLY REQUIRED ADDITION: Helper to get temp from API response
+  String? _getTempForDevice(String deviceId) {
+    // CASE 1: API returns list of devices
+    if (_latestData["devices"] is List) {
+      final list = _latestData["devices"] as List;
+      for (final item in list) {
+        if (item is Map) {
+          final id = (item["deviceId"] ?? item["id"] ?? "").toString();
+          if (id == deviceId) {
+            final t = item["temp"] ?? item["temperature"];
+            if (t == null) return null;
+            return t.toString();
+          }
+        }
+      }
+    }
+
+    // CASE 2: API returns map keyed by deviceId
+    if (_latestData[deviceId] is Map) {
+      final d = _latestData[deviceId] as Map;
+      final t = d["temp"] ?? d["temperature"];
+      if (t == null) return null;
+      return t.toString();
+    }
+
+    return null;
   }
 
   Future<bool> _confirmDelete(BuildContext context, int count) async {
@@ -105,10 +173,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 5), // ✅ auto dismiss
         content: Text("${deletedBackup.length} device(s) deleted ✅"),
         action: SnackBarAction(
           label: "UNDO",
           onPressed: () async {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar(); // ✅ close instantly
             for (final d in deletedBackup) {
               await LocalDeviceStore.addDevice(d);
             }
@@ -135,6 +205,20 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   Widget build(BuildContext context) {
     final padding = Responsive.pad(context);
     final devices = LocalDeviceStore.getDevices();
+
+    /// ✅ FIX A) Auto redirect to ServicesScreen when empty
+    if (devices.isEmpty && !_didAutoRedirect && !_isEditMode) {
+      _didAutoRedirect = true;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        Navigator.pushReplacementNamed(
+          context,
+          AppRoutes.services,
+        );
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -207,11 +291,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                   final deviceName =
                       (d["deviceName"] ?? "Unnamed Device").toString();
                   final dept = (d["department"] ?? "-").toString();
-                  final equipmentType =
-                      (d["equipmentType"] ?? "-").toString();
+                  final equipmentType = (d["equipmentType"] ?? "-").toString();
                   final status = (d["status"] ?? "NORMAL").toString();
 
                   final selected = _selected.contains(deviceId);
+
+                  // ✅ ONLY REQUIRED ADDITION: live temp read
+                  final liveTemp = _getTempForDevice(deviceId);
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -240,12 +326,10 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                               if (_isEditMode) ...[
                                 Checkbox(
                                   value: selected,
-                                  onChanged: (_) =>
-                                      _toggleSelection(deviceId),
+                                  onChanged: (_) => _toggleSelection(deviceId),
                                 ),
                                 const SizedBox(width: 6),
                               ],
-
                               Container(
                                 height: 46,
                                 width: 46,
@@ -258,16 +342,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                 ),
                                 child: Icon(
                                   _iconForType(equipmentType),
-                                  color:
-                                      Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                               ),
                               const SizedBox(width: 12),
-
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       children: [
@@ -289,9 +370,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                     const SizedBox(height: 6),
                                     Text(
                                       "$equipmentType • $dept",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium,
+                                      style: Theme.of(context).textTheme.bodyMedium,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -304,6 +383,23 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                           ?.copyWith(
                                             color: const Color(0xFF64748B),
                                             fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+
+                                    // ✅ ONLY REQUIRED ADDITION: TEMP LINE
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _loadingTemps
+                                          ? "Temp: loading..."
+                                          : "Temp: ${liveTemp ?? "--"} °C",
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                            color: liveTemp == null
+                                                ? const Color(0xFF64748B)
+                                                : Colors.blue,
                                           ),
                                     ),
                                   ],

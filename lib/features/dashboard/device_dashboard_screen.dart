@@ -1,10 +1,13 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
+
 import 'bbr_dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/utils/responsive.dart';
+import '../../data/api/android_data_api.dart';
 import '../devices/widgets/status_badge.dart';
 import 'widgets/telemetry_tile.dart';
 import 'widgets/temperature_chart.dart';
@@ -13,24 +16,157 @@ import 'widgets/dashboard_top_bar.dart';
 import 'pai_dashboard_screen.dart';
 import 'wic_dashboard_screen.dart';
 
-class DeviceDashboardScreen extends StatelessWidget {
+class DeviceDashboardScreen extends StatefulWidget {
   final String deviceId;
 
   const DeviceDashboardScreen({super.key, required this.deviceId});
 
-  // ✅ Dummy telemetry generator (for now)
-  // Later: replace with API response from Azure Functions
-  Map<String, dynamic> _mockTelemetry(String deviceId) {
-    // Just some sample values based on deviceId (so each device looks different)
-    final temp = deviceId.hashCode % 10 - 25; // range around -25
-    return {
-      "temperature": "$temp°C",
-      "door": "CLOSED",
-      "power": "ON",
-      "health": "ONLINE",
-      "status": "NORMAL",
-      "lastUpdated": DateTime.now().toIso8601String(),
-    };
+  @override
+  State<DeviceDashboardScreen> createState() => _DeviceDashboardScreenState();
+}
+
+class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
+  Timer? _alignedTimer;
+  bool _loading = false;
+
+  /// ✅ Latest telemetry (from GetAndroidData)
+  Map<String, dynamic> _telemetry = {
+    "temperature": "-",
+    "door": "-",
+    "power": "-",
+    "health": "-",
+    "status": "NORMAL",
+    "lastUpdated": "",
+  };
+
+  String _fmtTemp(dynamic pv) {
+    if (pv == null) return "-";
+
+    final s = pv.toString().trim();
+    if (s.isEmpty) return "-";
+
+    // if already contains °C, return
+    if (s.contains("°")) return s;
+
+    return "$s°C";
+  }
+
+  String _doorText(dynamic door) {
+    final v = door.toString().trim();
+    if (v == "1") return "OPEN";
+    if (v == "0") return "CLOSED";
+    return "-";
+  }
+
+  String _powerText(dynamic power) {
+    final v = power.toString().trim();
+    if (v == "1") return "ON";
+    if (v == "0") return "OFF";
+    return "-";
+  }
+
+  String _statusFromFlags(Map<String, dynamic> data) {
+    final lowamp = (data["lowamp"] ?? "").toString().trim();
+    final highamp = (data["highamp"] ?? "").toString().trim();
+
+    // ✅ If any alarm flag triggers, show ALARM
+    if (lowamp == "1" || highamp == "1") return "ALARM";
+
+    return "NORMAL";
+  }
+
+  Future<void> _fetchLive() async {
+    if (_loading) return;
+
+    setState(() => _loading = true);
+
+    final data = await AndroidDataApi.fetchLatest();
+
+    if (!mounted) return;
+
+    if (data != null) {
+      final t = {
+        "temperature": _fmtTemp(data["pv"]),
+        "door": _doorText(data["door"]),
+        "power": _powerText(data["power"]),
+        "health": "ONLINE",
+        "status": _statusFromFlags(data),
+        "lastUpdated": (data["timestamp"] ?? "").toString(),
+      };
+
+      setState(() {
+        _telemetry = t;
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _telemetry = {
+          ..._telemetry,
+          "health": "OFFLINE",
+        };
+        _loading = false;
+      });
+    }
+  }
+
+  /// ✅ Vinay schedule: 4,9,14,19,...59 minute every hour
+  void _startAlignedSchedule() {
+    _alignedTimer?.cancel();
+
+    final alignedMinutes = <int>[4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59];
+
+    final now = DateTime.now();
+    final currentMinute = now.minute;
+    final currentSecond = now.second;
+
+    int nextMinute = -1;
+    for (final m in alignedMinutes) {
+      if (m > currentMinute || (m == currentMinute && currentSecond < 2)) {
+        nextMinute = m;
+        break;
+      }
+    }
+
+    DateTime nextTime;
+    if (nextMinute == -1) {
+      // Next hour at minute 4
+      nextTime = DateTime(now.year, now.month, now.day, now.hour + 1, 4, 0);
+    } else {
+      nextTime = DateTime(now.year, now.month, now.day, now.hour, nextMinute, 0);
+    }
+
+    final delay = nextTime.difference(now);
+
+    _alignedTimer = Timer(delay, () async {
+      if (!mounted) return;
+
+      // ✅ aligned hit
+      await _fetchLive();
+
+      // ✅ repeat every 5 mins from here
+      _alignedTimer?.cancel();
+      _alignedTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+        if (!mounted) return;
+        await _fetchLive();
+      });
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    // ✅ immediate first fetch
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _fetchLive();
+      _startAlignedSchedule();
+    });
+  }
+
+  @override
+  void dispose() {
+    _alignedTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -38,9 +174,10 @@ class DeviceDashboardScreen extends StatelessWidget {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-    final activeDeviceId = args?["deviceId"] ?? deviceId;
+    final activeDeviceId = args?["deviceId"] ?? widget.deviceId;
     final equipmentType = args?["equipmentType"] ?? "UNKNOWN";
 
+    // ✅ If equipment dashboards already exist, keep them untouched
     if (equipmentType == "DEEP_FREEZER") {
       return DeepFreezerDashboardScreen(deviceId: activeDeviceId);
     }
@@ -57,12 +194,10 @@ class DeviceDashboardScreen extends StatelessWidget {
       return WicDashboardScreen(deviceId: activeDeviceId);
     }
 
-    final telemetry = _mockTelemetry(activeDeviceId);
-
-    final lastUpdated = DateTime.tryParse(telemetry["lastUpdated"] ?? "");
+    final lastUpdated = DateTime.tryParse((_telemetry["lastUpdated"] ?? "").toString());
     final formattedLast = lastUpdated == null
         ? "-"
-        : DateFormat("dd MMM, hh:mm a").format(lastUpdated);
+        : DateFormat("dd MMM, hh:mm a").format(lastUpdated.toLocal());
 
     final padding = Responsive.pad(context);
 
@@ -111,7 +246,7 @@ class DeviceDashboardScreen extends StatelessWidget {
                                       ?.copyWith(fontSize: 18),
                                 ),
                               ),
-                              StatusBadge(status: telemetry["status"] ?? "NORMAL")
+                              StatusBadge(status: _telemetry["status"] ?? "NORMAL")
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -127,6 +262,15 @@ class DeviceDashboardScreen extends StatelessWidget {
                                   fontSize: 12.5,
                                 ),
                           ),
+                          const SizedBox(height: 6),
+                          if (_loading)
+                            Text(
+                              "Fetching latest data...",
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: const Color(0xFF64748B),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
                         ],
                       ),
                     ),
@@ -160,26 +304,26 @@ class DeviceDashboardScreen extends StatelessWidget {
                     TelemetryTile(
                       icon: Icons.thermostat,
                       title: "Temperature",
-                      value: telemetry["temperature"] ?? "-",
-                      subtitle: "Current reading",
+                      value: (_telemetry["temperature"] ?? "-").toString(),
+                      subtitle: "Current reading (PV)",
                     ),
                     TelemetryTile(
                       icon: Icons.door_front_door_outlined,
                       title: "Door",
-                      value: telemetry["door"] ?? "-",
+                      value: (_telemetry["door"] ?? "-").toString(),
                       subtitle: "Open/close status",
                     ),
                     TelemetryTile(
                       icon: Icons.power_settings_new,
                       title: "Power",
-                      value: telemetry["power"] ?? "-",
+                      value: (_telemetry["power"] ?? "-").toString(),
                       subtitle: "Power supply state",
                     ),
                     TelemetryTile(
                       icon: Icons.wifi_tethering_outlined,
                       title: "Health",
-                      value: telemetry["health"] ?? "-",
-                      subtitle: "Connectivity status",
+                      value: (_telemetry["health"] ?? "-").toString(),
+                      subtitle: "API connectivity",
                     ),
                   ],
                 );
