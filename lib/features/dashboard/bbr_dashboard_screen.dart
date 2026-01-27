@@ -1,140 +1,315 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'widgets/dashboard_top_bar.dart';
-import 'widgets/status_row.dart';
 
-class BbrDashboardScreen extends StatelessWidget {
+import '../../data/api/android_data_api.dart';
+import 'widgets/status_row.dart';
+import 'widgets/dashboard_top_bar.dart';
+
+class BbrDashboardScreen extends StatefulWidget {
   final String deviceId;
 
   const BbrDashboardScreen({super.key, required this.deviceId});
 
   @override
+  State<BbrDashboardScreen> createState() => _BbrDashboardScreenState();
+}
+
+class _BbrDashboardScreenState extends State<BbrDashboardScreen> {
+  Timer? _timer;
+  bool _loading = false;
+
+  Map<String, dynamic> _data = {};
+
+  String _formatValue(String key, dynamic value) {
+    if (value == null) return "--";
+    final s = value.toString().trim();
+    if (s.isEmpty) return "--";
+
+    if (key.toLowerCase() == "pv" || key.toLowerCase() == "sv") {
+      if (s.contains("°")) return s;
+      return "$s°C";
+    }
+
+    if (key.toLowerCase() == "battery") {
+      return s.contains("%") ? s : "$s%";
+    }
+
+    if (key.toLowerCase() == "timestamp") return s;
+
+    if (s == "1") {
+      if (key.toLowerCase() == "door") return "OPEN";
+      return "ON";
+    }
+    if (s == "0") {
+      if (key.toLowerCase() == "door") return "CLOSED";
+      return "OFF";
+    }
+
+    return s;
+  }
+
+  String _prettyLabel(String key) {
+    final k = key.toLowerCase();
+    switch (k) {
+      case "pv":
+        return "PV";
+      case "sv":
+        return "SV";
+      case "compressor":
+        return "Compressor";
+      case "heater":
+        return "Heater";
+      case "probe":
+        return "Probe";
+      case "door":
+        return "Door";
+      case "battery":
+        return "Battery";
+      case "power":
+        return "Power";
+      case "timestamp":
+        return "Timestamp";
+      default:
+        return key
+            .replaceAll("_", " ")
+            .replaceAllMapped(
+              RegExp(r'([a-z])([A-Z])'),
+              (m) => "${m[1]} ${m[2]}",
+            )
+            .toUpperCase();
+    }
+  }
+
+  IconData _iconForKey(String key) {
+    final k = key.toLowerCase();
+    switch (k) {
+      case "compressor":
+        return Icons.settings;
+      case "heater":
+        return Icons.local_fire_department_outlined;
+      case "probe":
+        return Icons.thermostat;
+      case "door":
+        return Icons.door_front_door_outlined;
+      case "battery":
+        return Icons.battery_full;
+      case "power":
+        return Icons.power_settings_new;
+      case "pv":
+      case "sv":
+        return Icons.device_thermostat;
+      case "timestamp":
+        return Icons.schedule;
+      default:
+        return Icons.info_outline;
+    }
+  }
+
+  bool _isGood(String key, String v) {
+    final k = key.toLowerCase();
+    if (k == "door") return v.toUpperCase() == "CLOSED";
+    if (v.toUpperCase() == "ON") return true;
+    if (v.toUpperCase() == "OFF") return false;
+    return true;
+  }
+
+  Future<void> _fetch() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+
+    final data = await AndroidDataApi.fetchLatest();
+
+    if (!mounted) return;
+
+    if (data == null) {
+      setState(() => _loading = false);
+      return;
+    }
+
+    setState(() {
+      _data = Map<String, dynamic>.from(data);
+      _loading = false;
+    });
+  }
+
+  List<Widget> _buildDynamicRows() {
+    if (_data.isEmpty) {
+      return const [
+        StatusRow(
+          icon: Icons.info_outline,
+          label: "No data",
+          value: "--",
+          isGood: true,
+        ),
+      ];
+    }
+
+    final shown = <String>{};
+    final rows = <Widget>[];
+
+    _data.forEach((key, value) {
+      final normalizedKey = key.toLowerCase().trim();
+      if (shown.contains(normalizedKey)) return;
+      shown.add(normalizedKey);
+
+      // PV/SV already shown in big section if present
+      if (normalizedKey == "pv" || normalizedKey == "sv") return;
+
+      final formatted = _formatValue(key, value);
+
+      rows.add(
+        StatusRow(
+          icon: _iconForKey(key),
+          label: _prettyLabel(key),
+          value: formatted,
+          isGood: _isGood(key, formatted),
+        ),
+      );
+    });
+
+    return rows;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _fetch();
+    });
+
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      await _fetch();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // ✅ Dummy values (later we fetch from Azure)
-    const pv = "4°C";
-    const sv = "5°C";
+    final pv = _formatValue("pv", _data["pv"]);
+    final sv = _formatValue("sv", _data["sv"]);
+    final power = _formatValue("power", _data["power"]);
+    final battery = _formatValue("battery", _data["battery"]);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
-      appBar: const DashboardTopBar(),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 18),
+      appBar: DashboardTopBar(
+        powerText: "Power: $power",
+        batteryText: battery,
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final w = constraints.maxWidth;
 
-            // ✅ Title + PV/SV section (Deep Freezer style)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Column(
-                children: [
-                  const Text(
-                    "BLOOD BAG REFRIGERATOR",
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF60A5FA),
-                      letterSpacing: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 18),
+          final maxContentWidth = w > 600 ? 520.0 : w;
+          double titleSize = w < 360 ? 20 : (w < 450 ? 24 : 26);
+          double pvSize = w < 360 ? 52 : (w < 450 ? 62 : 70);
+          double svSize = w < 360 ? 28 : (w < 450 ? 32 : 36);
 
-                  const Text(
-                    "PV",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 18),
 
-                  Text(
-                    pv,
-                    style: const TextStyle(
-                      fontSize: 70,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF22C55E),
+                    Text(
+                      "BLOOD BAG REFRIGERATOR",
+                      style: TextStyle(
+                        fontSize: titleSize,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF60A5FA),
+                        letterSpacing: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  const SizedBox(height: 14),
 
-                  const Text(
-                    "SV",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                    const SizedBox(height: 8),
 
-                  const Text(
-                    sv,
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF38BDF8),
+                    if (_loading)
+                      Text(
+                        "Fetching latest data...",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.55),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                    const SizedBox(height: 14),
+
+                    if (_data.containsKey("pv")) ...[
+                      const Text(
+                        "PV",
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          pv,
+                          style: TextStyle(
+                            fontSize: pvSize,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF22C55E),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    if (_data.containsKey("sv")) ...[
+                      const Text(
+                        "SV",
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        sv,
+                        style: TextStyle(
+                          fontSize: svSize,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF38BDF8),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+                    Divider(color: Colors.white.withOpacity(0.12), height: 1),
+                    const SizedBox(height: 10),
+
+                    Column(
+                      children: _buildDynamicRows(),
                     ),
-                  ),
-                ],
+
+                    const SizedBox(height: 26),
+                    Text(
+                      "Device ID: ${widget.deviceId}",
+                      style: const TextStyle(color: Colors.white38),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                ),
               ),
             ),
-
-            const SizedBox(height: 24),
-            Divider(color: Colors.white.withOpacity(0.12), height: 1),
-            const SizedBox(height: 10),
-
-            // ✅ Status list (taken from your BBR reference)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Column(
-                children: const [
-                  StatusRow(
-                    icon: Icons.settings,
-                    label: "Compressor",
-                    value: "ON",
-                    isGood: true,
-                  ),
-                  StatusRow(
-                    icon: Icons.local_fire_department_outlined,
-                    label: "Heater",
-                    value: "OFF",
-                    isGood: true,
-                  ),
-                  StatusRow(
-                    icon: Icons.thermostat,
-                    label: "Probe",
-                    value: "OK",
-                    isGood: true,
-                  ),
-                  StatusRow(
-                    icon: Icons.door_front_door_outlined,
-                    label: "Door",
-                    value: "Closed",
-                    isGood: true,
-                  ),
-                  StatusRow(
-                    icon: Icons.insert_chart_outlined,
-                    label: "Data Log",
-                    value: "OK",
-                    isGood: true,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 26),
-
-            // ✅ Device ID footer
-            Text(
-              "Device ID: $deviceId",
-              style: const TextStyle(color: Colors.white38),
-            ),
-            const SizedBox(height: 22),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

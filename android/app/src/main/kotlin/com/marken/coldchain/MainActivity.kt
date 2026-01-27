@@ -1,4 +1,4 @@
-package com.example.cold_chain_monitor
+package com.marken.coldchain
 
 import io.flutter.embedding.android.FlutterActivity
 

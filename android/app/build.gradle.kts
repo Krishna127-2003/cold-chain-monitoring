@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cold_chain_monitor"
+    namespace = "com.marken.coldchain"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.cold_chain_monitor"
+        applicationId = "com.marken.coldchain"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = flutter.versionCode

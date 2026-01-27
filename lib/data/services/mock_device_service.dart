@@ -2,11 +2,12 @@ class MockDeviceService {
   // ✅ Dummy master registry (simulate Azure DeviceRegistry)
   // Later backend will validate from Azure Table Storage
   static const Map<String, String> _deviceRegistry = {
-    "DF-001": "KEY-1234",
+    "CB5191": "ETXSOBSOSF123214",
     "DF-002": "KEY-12345",
     "BBR-101": "KEY-5678",
     "PLT-777": "KEY-7777",
     "WIC-900": "KEY-9000",  
+    "Device5192":"12345"
   };
 
   Future<Map<String, dynamic>> verifyDevice({

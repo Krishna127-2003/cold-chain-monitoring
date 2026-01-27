@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, no_leading_underscores_for_local_identifiers
 
 import 'dart:async';
 
@@ -115,41 +115,45 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
 
     final alignedMinutes = <int>[4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59];
 
-    final now = DateTime.now();
-    final currentMinute = now.minute;
-    final currentSecond = now.second;
+    DateTime _nextAlignedTime(DateTime now) {
+      final currentMinute = now.minute;
+      final currentSecond = now.second;
 
-    int nextMinute = -1;
-    for (final m in alignedMinutes) {
-      if (m > currentMinute || (m == currentMinute && currentSecond < 2)) {
-        nextMinute = m;
-        break;
+      int nextMinute = -1;
+      for (final m in alignedMinutes) {
+        if (m > currentMinute || (m == currentMinute && currentSecond < 2)) {
+          nextMinute = m;
+          break;
+        }
       }
+
+      if (nextMinute == -1) {
+        // ✅ Next hour at minute 4
+        return DateTime(now.year, now.month, now.day, now.hour + 1, 4, 0);
+      }
+
+      return DateTime(now.year, now.month, now.day, now.hour, nextMinute, 0);
     }
 
-    DateTime nextTime;
-    if (nextMinute == -1) {
-      // Next hour at minute 4
-      nextTime = DateTime(now.year, now.month, now.day, now.hour + 1, 4, 0);
-    } else {
-      nextTime = DateTime(now.year, now.month, now.day, now.hour, nextMinute, 0);
-    }
-
-    final delay = nextTime.difference(now);
-
-    _alignedTimer = Timer(delay, () async {
+    void _scheduleNextTick() {
       if (!mounted) return;
 
-      // ✅ aligned hit
-      await _fetchLive();
+      final now = DateTime.now();
+      final nextTime = _nextAlignedTime(now);
+      final delay = nextTime.difference(now);
 
-      // ✅ repeat every 5 mins from here
       _alignedTimer?.cancel();
-      _alignedTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      _alignedTimer = Timer(delay, () async {
         if (!mounted) return;
+
         await _fetchLive();
+
+        // ✅ after executing once, schedule next aligned again
+        _scheduleNextTick();
       });
-    });
+    }
+
+    _scheduleNextTick();
   }
 
   @override
@@ -194,7 +198,8 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
       return WicDashboardScreen(deviceId: activeDeviceId);
     }
 
-    final lastUpdated = DateTime.tryParse((_telemetry["lastUpdated"] ?? "").toString());
+    final lastUpdated =
+        DateTime.tryParse((_telemetry["lastUpdated"] ?? "").toString());
     final formattedLast = lastUpdated == null
         ? "-"
         : DateFormat("dd MMM, hh:mm a").format(lastUpdated.toLocal());
@@ -246,7 +251,8 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                                       ?.copyWith(fontSize: 18),
                                 ),
                               ),
-                              StatusBadge(status: _telemetry["status"] ?? "NORMAL")
+                              StatusBadge(
+                                  status: _telemetry["status"] ?? "NORMAL")
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -361,11 +367,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-
                     TemperatureChart(
                       points: const [-26, -25, -25, -24, -26, -27, -25, -24, -25, -26],
                     ),
-
                     const SizedBox(height: 8),
                     Text(
                       "Dummy chart now • will connect to Azure history API later",

@@ -1,10 +1,16 @@
 // ignore_for_file: unused_local_variable
 
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../routes/app_routes.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart'
+    as mlkit;
+
 
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
@@ -31,6 +37,9 @@ class _QrScanScreenState extends State<QrScanScreen>
 
   // ✅ scan line animation
   late final AnimationController _scanLineController;
+
+  // ✅ Gallery scan loading
+  bool _galleryLoading = false;
 
   @override
   void initState() {
@@ -60,6 +69,91 @@ class _QrScanScreenState extends State<QrScanScreen>
     setState(() {});
   }
 
+  void _goNext({
+    required String equipmentType,
+    required String deviceId,
+  }) {
+    if (_scanned) return;
+
+    setState(() => _scanned = true);
+    HapticFeedback.lightImpact();
+
+    Navigator.pushNamed(
+      context,
+      AppRoutes.productKey,
+      arguments: {
+        "deviceId": deviceId,
+        "equipmentType": equipmentType,
+      },
+    );
+
+    // optional: allow scanning again after coming back
+    Timer(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _scanned = false);
+    });
+  }
+
+  /// ✅ DEMO BUTTON: Instant deviceId = 5192
+  void _demoSkip({
+    required String equipmentType,
+  }) {
+    _goNext(equipmentType: equipmentType, deviceId: "5192");
+  }
+
+  /// ✅ Pick image from gallery and scan QR
+  Future<void> _scanFromGallery(String equipmentType) async {
+    if (_galleryLoading) return;
+
+    setState(() => _galleryLoading = true);
+
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery);
+
+      if (picked == null) {
+        setState(() => _galleryLoading = false);
+        return;
+      }
+
+      final inputImage = mlkit.InputImage.fromFile(File(picked.path));
+
+      final barcodeScanner =
+          mlkit.BarcodeScanner(formats: [mlkit.BarcodeFormat.qrCode]);
+
+      final barcodes = await barcodeScanner.processImage(inputImage);
+      await barcodeScanner.close();
+
+      if (!mounted) return;
+
+      if (barcodes.isEmpty) {
+        setState(() => _galleryLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No QR code detected in this image ❌")),
+        );
+        return;
+      }
+
+      final raw = barcodes.first.rawValue ?? "";
+      if (raw.trim().isEmpty) {
+        setState(() => _galleryLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("QR detected but value is empty ❌")),
+        );
+        return;
+      }
+
+      setState(() => _galleryLoading = false);
+
+      _goNext(equipmentType: equipmentType, deviceId: raw.trim());
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _galleryLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gallery scan failed: $e")),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -82,6 +176,22 @@ class _QrScanScreenState extends State<QrScanScreen>
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          /// ✅ Gallery Scan Button
+          IconButton(
+            tooltip: "Scan from gallery",
+            onPressed: _galleryLoading
+                ? null
+                : () => _scanFromGallery(equipmentType),
+            icon: _galleryLoading
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.photo_library_outlined),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -106,23 +216,10 @@ class _QrScanScreenState extends State<QrScanScreen>
                 final rawValue = barcodes.first.rawValue;
                 if (rawValue == null || rawValue.isEmpty) return;
 
-                setState(() => _scanned = true);
-
-                HapticFeedback.lightImpact();
-
-                Navigator.pushNamed(
-                  context,
-                  AppRoutes.productKey,
-                  arguments: {
-                    "deviceId": rawValue,
-                    "equipmentType": equipmentType,
-                  },
+                _goNext(
+                  equipmentType: equipmentType,
+                  deviceId: rawValue,
                 );
-
-                // optional: allow scanning again after coming back
-                Timer(const Duration(milliseconds: 800), () {
-                  if (mounted) setState(() => _scanned = false);
-                });
               },
             ),
           ),
@@ -155,8 +252,10 @@ class _QrScanScreenState extends State<QrScanScreen>
                   ),
                   const Spacer(),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(999),
@@ -166,8 +265,11 @@ class _QrScanScreenState extends State<QrScanScreen>
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.zoom_in,
-                            color: Colors.white70, size: 18),
+                        const Icon(
+                          Icons.zoom_in,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           "${(_currentZoom * 100).toInt()}%",
@@ -185,7 +287,7 @@ class _QrScanScreenState extends State<QrScanScreen>
             ),
           ),
 
-          /// ✅ Bottom instruction card (GPay-like)
+          /// ✅ Bottom instruction card (GPay-like) + Demo button
           Positioned(
             bottom: 22,
             left: 16,
@@ -194,40 +296,73 @@ class _QrScanScreenState extends State<QrScanScreen>
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white
-                        .withValues(alpha: isDark ? 0.08 : 0.10),
+                    color:
+                        Colors.white.withValues(alpha: isDark ? 0.08 : 0.10),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.14),
                     ),
                   ),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        height: 44,
-                        width: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.qr_code_scanner_rounded,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            height: 44,
+                            width: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.qr_code_scanner_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _scanned
+                                  ? "QR scanned ✅ Redirecting..."
+                                  : "Align the QR code inside the box to scan",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _scanned
-                              ? "QR scanned ✅ Redirecting..."
-                              : "Align the QR code inside the box to scan",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13.5,
+
+                      const SizedBox(height: 10),
+
+                      /// ✅ Demo button (5192)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _scanned ? null : () => _demoSkip(equipmentType: equipmentType),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.30),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: const Icon(Icons.bolt),
+                          label: const Text(
+                            "Skip Scan (Demo 5192)",
+                            style: TextStyle(fontWeight: FontWeight.w900),
                           ),
                         ),
                       ),
@@ -238,9 +373,9 @@ class _QrScanScreenState extends State<QrScanScreen>
             ),
           ),
 
-          /// ✅ Optional: Zoom slider like GPay (feel premium)
+          /// ✅ Optional: Zoom slider
           Positioned(
-            bottom: 110,
+            bottom: 130,
             left: 30,
             right: 30,
             child: SafeArea(
@@ -451,12 +586,14 @@ class _GPayOverlayPainter extends CustomPainter {
           Colors.white.withValues(alpha: 0.85),
           Colors.transparent,
         ],
-      ).createShader(Rect.fromLTWH(
-        cutOutRect.left,
-        lineY - 2,
-        cutOutRect.width,
-        4,
-      ));
+      ).createShader(
+        Rect.fromLTWH(
+          cutOutRect.left,
+          lineY - 2,
+          cutOutRect.width,
+          4,
+        ),
+      );
 
     canvas.drawRect(
       Rect.fromLTWH(cutOutRect.left, lineY - 2, cutOutRect.width, 4),

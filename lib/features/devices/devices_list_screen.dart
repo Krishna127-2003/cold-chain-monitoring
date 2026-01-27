@@ -96,104 +96,13 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
     return result ?? false;
   }
 
-  /// ✅ PIN verification popup (REQUIRED)
-  Future<bool> _verifyPin(String correctPin) async {
-    final pinController = TextEditingController();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Enter PIN to Delete"),
-        content: TextField(
-          controller: pinController,
-          keyboardType: TextInputType.number,
-          obscureText: true,
-          decoration: const InputDecoration(
-            hintText: "Enter device PIN",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              final entered = pinController.text.trim();
-              Navigator.pop(context, entered == correctPin.trim());
-            },
-            child: const Text("Confirm"),
-          ),
-        ],
-      ),
-    );
-
-    return ok ?? false;
-  }
-
-  /// ✅ SINGLE delete (PIN protected)
-  Future<void> _deleteSingleDevice(
-    List<Map<String, dynamic>> currentDevices,
-    String deviceId,
-  ) async {
-    final okDelete = await _confirmDelete(context, 1);
-    if (!okDelete) return;
-
-    final device = currentDevices.firstWhere(
-      (d) => (d["deviceId"] ?? "").toString() == deviceId,
-      orElse: () => {},
-    );
-
-    final correctPin = (device["pin"] ?? "").toString();
-    if (correctPin.isNotEmpty) {
-      final okPin = await _verifyPin(correctPin);
-      if (!okPin) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Wrong PIN ❌ Delete cancelled")),
-        );
-        return;
-      }
-    }
-
-    final deletedBackup = currentDevices
-        .where((d) => (d["deviceId"] ?? "").toString() == deviceId)
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
-
-    await LocalDeviceStore.deleteDevice(
-      equipmentType: widget.equipmentType,
-      deviceId: deviceId,
-    );
-
-    setState(() {});
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("1 device deleted ✅"),
-        action: SnackBarAction(
-          label: "UNDO",
-          onPressed: () async {
-            for (final d in deletedBackup) {
-              await LocalDeviceStore.addDevice(d);
-            }
-            setState(() {});
-          },
-        ),
-      ),
-    );
-  }
-
-  /// ✅ MULTI delete (PIN protected)
   void _deleteSelectedDevices(
     List<Map<String, dynamic>> currentDevices,
   ) async {
     if (_selected.isEmpty) return;
 
-    final okDelete = await _confirmDelete(context, _selected.length);
-    if (!okDelete) return;
+    final ok = await _confirmDelete(context, _selected.length);
+    if (!ok) return;
 
     // ✅ Backup deleted devices for Undo
     final deletedBackup = currentDevices
@@ -201,34 +110,19 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
 
-    // ✅ PIN check (IF ANY selected device has pin, ask pin for each device)
-    for (final d in deletedBackup) {
-      final correctPin = (d["pin"] ?? "").toString();
-      if (correctPin.isNotEmpty) {
-        final okPin = await _verifyPin(correctPin);
-        if (!okPin) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Wrong PIN ❌ Delete cancelled")),
-          );
-          return;
-        }
-      }
-    }
-
-    // ✅ Delete permanently
+    // ✅ Delete from store (single save)
     await LocalDeviceStore.deleteMany(
-      equipmentType: widget.equipmentType,
+      equipmentType: _equipmentType(context),
       deviceIds: _selected.toList(),
     );
 
-    // ✅ Exit edit mode + refresh
+    // ✅ Exit edit mode and refresh
     setState(() {
       _isEditMode = false;
       _selected.clear();
     });
 
-    setState(() {});
-
+    // ✅ Undo SnackBar
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -246,10 +140,19 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
     );
   }
 
+  /// ✅ REQUIRED FIX: Read equipmentType from arguments if available
+  String _equipmentType(BuildContext context) {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    return (args?["equipmentType"] ?? widget.equipmentType).toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final padding = Responsive.pad(context);
-    final equipmentType = widget.equipmentType;
+
+    /// ✅ IMPORTANT FIX: use the real equipmentType passed from ServicesScreen
+    final equipmentType = _equipmentType(context);
 
     final devices = LocalDeviceStore.getDevices(equipmentType: equipmentType);
 
@@ -265,7 +168,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
               onPressed: _toggleEditMode,
               tooltip: _isEditMode ? "Exit edit mode" : "Edit devices",
             ),
-
           if (_isEditMode) ...[
             IconButton(
               icon: const Icon(Icons.select_all),
@@ -287,7 +189,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
           ],
         ],
       ),
-
       floatingActionButton: _isEditMode
           ? null
           : FloatingActionButton(
@@ -300,7 +201,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
               },
               child: const Icon(Icons.add),
             ),
-
       body: Padding(
         padding: EdgeInsets.all(padding),
         child: Column(
@@ -318,7 +218,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-
             Expanded(
               child: devices.isEmpty
                   ? _EmptyState(
@@ -337,8 +236,7 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
                         final status = (d["status"] ?? "NORMAL").toString();
 
                         final lastUpdated = DateTime.tryParse(
-                          (d["lastUpdated"] ?? "").toString(),
-                        );
+                            (d["lastUpdated"] ?? "").toString());
                         final formatted = lastUpdated == null
                             ? "-"
                             : DateFormat("dd MMM, hh:mm a").format(lastUpdated);
@@ -377,7 +275,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
                                       ),
                                       const SizedBox(width: 6),
                                     ],
-
                                     Container(
                                       height: 46,
                                       width: 46,
@@ -396,7 +293,6 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -416,27 +312,11 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-
-                                              // ✅ SINGLE DELETE ICON (EDIT MODE ONLY)
-                                              if (_isEditMode)
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _deleteSingleDevice(
-                                                    devices,
-                                                    deviceId,
-                                                  ),
-                                                ),
-
                                               if (!_isEditMode)
                                                 FittedBox(
                                                   fit: BoxFit.scaleDown,
                                                   child: StatusBadge(
-                                                    status: status,
-                                                  ),
+                                                      status: status),
                                                 ),
                                             ],
                                           ),

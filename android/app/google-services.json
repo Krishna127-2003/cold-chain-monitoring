@@ -41,6 +41,43 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:653168096175:android:d91c14fbab5f0b27c1f55a",
+        "android_client_info": {
+          "package_name": "com.marken.coldchain"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "653168096175-p9gkc2p75d2fqrg5vkln7sfg7lsj0n4j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marken.coldchain",
+            "certificate_hash": "fac478965a9f62fdaca6098d8827de39eb9c19d0"
+          }
+        },
+        {
+          "client_id": "653168096175-2onbtgkhlk1vj1nttgu1n3b5vlchec8k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxT26aNa1TI3x7PQxbiiKOS-Vr728k_-Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "653168096175-2onbtgkhlk1vj1nttgu1n3b5vlchec8k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
