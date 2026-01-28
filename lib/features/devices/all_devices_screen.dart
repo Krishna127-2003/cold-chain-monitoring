@@ -4,10 +4,14 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import '../../core/utils/responsive.dart';
-import '../../data/storage/local_device_store.dart';
 import '../../routes/app_routes.dart';
 import '../auth/google_auth_service.dart';
 import '../../data/api/android_data_api.dart';
+import '../../data/repository/device_repository.dart';
+import '../../data/repository_impl/local_device_repository.dart';
+import '../../data/session/session_manager.dart';
+import '../../data/models/registered_device.dart';
+
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -17,14 +21,17 @@ class AllDevicesScreen extends StatefulWidget {
 }
 
 class _AllDevicesScreenState extends State<AllDevicesScreen> {
+
+  final DeviceRepository _deviceRepo = LocalDeviceRepository();
+  List<RegisteredDevice> _devices = [];
+  bool _loadingDevices = true;
+
   bool _isEditMode = false;
 
   /// selected deviceIds
   final Set<String> _selected = {};
 
   /// ✅ FIX A) Prevent multiple redirects loop
-  bool _didAutoRedirect = false;
-
   Timer? _tempTimer;
   Map<String, dynamic> _latestData = {};
   bool _loadingTemps = false;
@@ -46,11 +53,11 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     });
   }
 
-  void _selectAll(List<Map<String, dynamic>> devices) {
+  void _selectAll(List<RegisteredDevice> devices) {
     setState(() {
       _selected.clear();
       for (final d in devices) {
-        final id = (d["deviceId"] ?? "").toString();
+        final id = d.deviceId;
         if (id.isNotEmpty) _selected.add(id);
       }
     });
@@ -64,6 +71,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   void initState() {
     super.initState();
 
+    _loadDevices(); // 👈 ADD THIS
     _loadTemps();
 
     // ✅ refresh every 60 seconds when saved devices screen is open
@@ -76,6 +84,26 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   void dispose() {
     _tempTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadDevices() async {
+    setState(() => _loadingDevices = true);
+
+    final loginType = await SessionManager.getLoginType();
+    final email = await SessionManager.getEmail();
+
+    final result = await _deviceRepo.getRegisteredDevices(
+      email: email ?? "",
+      loginType: loginType ?? "guest",
+    );
+
+
+    if (!mounted) return;
+
+    setState(() {
+      _devices = result;
+      _loadingDevices = false;
+    });
   }
 
   Future<void> _loadTemps() async {
@@ -145,7 +173,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   Future<void> _deleteSelectedDevices(
-    List<Map<String, dynamic>> currentDevices,
+    List<RegisteredDevice> currentDevices,
   ) async {
     if (_selected.isEmpty) return;
 
@@ -154,13 +182,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
     // ✅ Backup deleted devices for Undo
     final deletedBackup = currentDevices
-        .where((d) => _selected.contains((d["deviceId"] ?? "").toString()))
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+      .where((d) => _selected.contains(d.deviceId))
+      .toList();
+
 
     // ✅ FIX: Delete globally (because AllDevicesScreen has devices from ALL equipment types)
     for (final id in _selected) {
-      await LocalDeviceStore.deleteDeviceGlobal(deviceId: id);
+      await _deviceRepo.deleteDevice(id);
     }
 
     // ✅ Exit edit mode and refresh
@@ -180,7 +208,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
           onPressed: () async {
             ScaffoldMessenger.of(context).hideCurrentSnackBar(); // ✅ close instantly
             for (final d in deletedBackup) {
-              await LocalDeviceStore.addDevice(d);
+              await _deviceRepo.registerDevice(d);
             }
             setState(() {});
           },
@@ -191,6 +219,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   Future<void> _logout() async {
     await GoogleAuthService.signOut();
+    await SessionManager.logout(); // ✅ CLEAR SESSION
 
     if (!mounted) return;
 
@@ -204,21 +233,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   @override
   Widget build(BuildContext context) {
     final padding = Responsive.pad(context);
-    final devices = LocalDeviceStore.getDevices();
-
-    /// ✅ FIX A) Auto redirect to ServicesScreen when empty
-    if (devices.isEmpty && !_didAutoRedirect && !_isEditMode) {
-      _didAutoRedirect = true;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-
-        Navigator.pushReplacementNamed(
-          context,
-          AppRoutes.services,
-        );
-      });
-    }
+    final devices = _devices;
 
     return Scaffold(
       appBar: AppBar(
@@ -280,19 +295,20 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
       body: Padding(
         padding: EdgeInsets.all(padding),
-        child: devices.isEmpty
-            ? _emptyState(context)
-            : ListView.builder(
+        child: _loadingDevices
+            ? const Center(child: CircularProgressIndicator())
+            : devices.isEmpty
+                ? _emptyState(context)
+                : ListView.builder(
                 itemCount: devices.length,
                 itemBuilder: (context, index) {
                   final d = devices[index];
 
-                  final deviceId = (d["deviceId"] ?? "-").toString();
-                  final deviceName =
-                      (d["deviceName"] ?? "Unnamed Device").toString();
-                  final dept = (d["department"] ?? "-").toString();
-                  final equipmentType = (d["equipmentType"] ?? "-").toString();
-                  final status = (d["status"] ?? "NORMAL").toString();
+                  final deviceId = d.deviceId;
+                  final deviceName = d.deviceId; // until you add a name field
+                  final dept = "-";              // placeholder
+                  final equipmentType = d.serviceType;
+                  final status = "NORMAL";
 
                   final selected = _selected.contains(deviceId);
 

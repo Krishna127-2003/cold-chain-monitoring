@@ -6,9 +6,9 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final bool showTitle;
 
-  /// ✅ NEW: dynamic top right values
-  final String powerText;   // ex: "Power: OK"
-  final String batteryText; // ex: "80%"
+  /// ✅ dynamic top-right values
+  final String powerText;
+  final String batteryText;
 
   const DashboardTopBar({
     super.key,
@@ -21,6 +21,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
+  // 🔋 Battery icon based on %
   IconData _batteryIcon(String battery) {
     final digits = battery.replaceAll("%", "").trim();
     final p = int.tryParse(digits);
@@ -45,24 +46,59 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+
+    // 📱 Responsive values
+    final bool isSmallMobile = width < 360;
+    final bool isTabletOrWeb = width > 600;
+
+    final double logoHeight =
+        isSmallMobile ? 26 : (isTabletOrWeb ? 36 : 30);
+
+    final EdgeInsets logoPadding = EdgeInsets.symmetric(
+      horizontal: isSmallMobile ? 10 : (isTabletOrWeb ? 16 : 12),
+      vertical: isSmallMobile ? 6 : (isTabletOrWeb ? 10 : 8),
+    );
+
+    final double borderRadius =
+        isSmallMobile ? 12 : (isTabletOrWeb ? 18 : 14);
+
     return AppBar(
       backgroundColor: const Color(0xFF0A1020),
       elevation: 0,
+      automaticallyImplyLeading: false,
 
-      // ✅ Keep logo fixed at top-left
-      leadingWidth: 120,
+      /// ⬅️ LOGO (Auth-style, responsive)
+      leadingWidth: isTabletOrWeb ? 160 : 140,
       leading: Padding(
         padding: const EdgeInsets.only(left: 12),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: SvgPicture.asset(
-            "assets/images/marken_logo.svg",
-            height: 34,
+          child: Container(
+            padding: logoPadding,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(borderRadius),
+              border: Border.all(
+                color: Colors.black.withValues(alpha: 0.6),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                  color: Colors.black.withValues(alpha: 0.25),
+                ),
+              ],
+            ),
+            child: SvgPicture.asset(
+              "assets/images/marken_logo.svg",
+              height: logoHeight,
+            ),
           ),
         ),
       ),
 
-      // ✅ No title to avoid pushing logo
+      /// Optional title (rarely used, kept safe)
       title: showTitle && title.isNotEmpty
           ? Text(
               title,
@@ -74,12 +110,13 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
             )
           : null,
 
+      /// 👉 Right-side status + menu
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 10),
           child: Row(
             children: [
-              /// ✅ POWER (dynamic)
+              /// 🔌 Power
               Text(
                 powerText,
                 style: const TextStyle(
@@ -89,10 +126,11 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               const SizedBox(width: 14),
 
-              /// ✅ BATTERY (dynamic)
+              /// 🔋 Battery
               Icon(
                 _batteryIcon(batteryText),
                 color: _batteryColor(batteryText),
+                size: 20,
               ),
               const SizedBox(width: 6),
               Text(
@@ -104,6 +142,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               const SizedBox(width: 8),
 
+              /// ☰ Menu
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (value) {

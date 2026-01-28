@@ -10,6 +10,8 @@ import '../../core/utils/responsive.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import 'google_auth_service.dart';
+import '../../data/session/session_manager.dart'; // ✅ NEW
+
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -55,8 +57,9 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Future<void> _goNext() async {
-    Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
+    Navigator.pushReplacementNamed(context, AppRoutes.services);
   }
+
 
   Future<void> _onGooglePressed() async {
     setState(() => _loadingGoogle = true);
@@ -76,6 +79,12 @@ class _AuthScreenState extends State<AuthScreen>
       return;
     }
 
+     /// ✅ SAVE LOGIN SESSION
+    await SessionManager.saveLogin(
+      loginType: "google",
+      email: userCredential.user?.email,
+    );
+
     setState(() => _loadingGoogle = false);
 
     // ✅ Success → go to services screen
@@ -88,6 +97,10 @@ class _AuthScreenState extends State<AuthScreen>
     await Future.delayed(const Duration(milliseconds: 550));
 
     if (!mounted) return;
+
+     /// ✅ SAVE GUEST SESSION
+    await SessionManager.saveLogin(loginType: "guest");
+
     setState(() => _loadingGuest = false);
 
     await _goNext();

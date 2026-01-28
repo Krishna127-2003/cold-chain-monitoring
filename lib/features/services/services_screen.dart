@@ -1,89 +1,249 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/utils/responsive.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
+import '../../data/session/session_manager.dart';
+import '../auth/google_auth_service.dart';
 
-class ServicesScreen extends StatelessWidget {
+class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
+
+  @override
+  State<ServicesScreen> createState() => _ServicesScreenState();
+}
+
+class _ServicesScreenState extends State<ServicesScreen> {
+  bool _loggingOut = false;
+
+  String? _email;
+  String? _loginType;
+  String? _photoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionInfo();
+  }
+
+  /// 🔄 LOAD SESSION + GOOGLE PROFILE
+  Future<void> _loadSessionInfo() async {
+    final email = await SessionManager.getEmail();
+    final type = await SessionManager.getLoginType();
+
+    String? photo;
+    if (type == "google") {
+      photo = FirebaseAuth.instance.currentUser?.photoURL;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _email = email;
+      _loginType = type;
+      _photoUrl = photo;
+    });
+  }
 
   void _openDevices(BuildContext context, String equipmentType) {
     Navigator.pushNamed(
       context,
-      AppRoutes.devices, // ✅ THIS IS YOUR EXISTING ROUTE
+      AppRoutes.devices,
       arguments: {"equipmentType": equipmentType},
+    );
+  }
+
+  /// 🔐 CONFIRM LOGOUT DIALOG
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Logout"),
+        content: const Text(
+          "Are you sure you want to logout?\nYou will need to sign in again.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _logout();
+    }
+  }
+
+  /// 🔥 LOGOUT FLOW
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+
+    try {
+      await GoogleAuthService.signOut();
+      await SessionManager.logout();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.auth,
+      (route) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final pad = Responsive.pad(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Services"),
-        actions: const [
-          _ThemeMenuButton(),
-          SizedBox(width: 6),
-        ],
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Choose equipment type",
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "Monitor and manage your devices securely",
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 18),
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white70 : Colors.black54;
+    final avatarBg =
+        isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.06);
 
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 14,
-                childAspectRatio: .80,
-                children: [
-                  _ServiceCard(
-                    title: "Deep Freezer",
-                    subtitle: "Ultra-low monitoring",
-                    icon: Icons.ac_unit,
-                    onTap: () => _openDevices(context, "DEEP_FREEZER"),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Services", style: TextStyle(color: primaryText)),
+                Text(
+                  _loginType == "google"
+                      ? (_email ?? "")
+                      : "Guest User",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: secondaryText,
                   ),
-                  _ServiceCard(
-                    title: "BBR",
-                    subtitle: "Blood bank safety",
-                    icon: Icons.medical_services_outlined,
-                    onTap: () => _openDevices(context, "BBR"),
-                  ),
-                  _ServiceCard(
-                    title: "Platelet Incubator",
-                    subtitle: "Agitation + temp control",
-                    icon: Icons.science_outlined,
-                    onTap: () => _openDevices(context, "PLATELET"),
-                  ),
-                  _ServiceCard(
-                    title: "Walk-in Cooler",
-                    subtitle: "Cold room monitoring",
-                    icon: Icons.warehouse_outlined,
-                    onTap: () => _openDevices(context, "WALK_IN_COOLER"),
+                ),
+              ],
+            ),
+            actions: [
+              /// 👤 PROFILE PHOTO / FALLBACK
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: avatarBg,
+                  backgroundImage:
+                      (_loginType == "google" && _photoUrl != null)
+                          ? NetworkImage(_photoUrl!)
+                          : null,
+                  child: (_loginType != "google" || _photoUrl == null)
+                      ? Icon(Icons.person, size: 18, color: primaryText)
+                      : null,
+                ),
+              ),
+
+              const _ThemeMenuButton(),
+              const SizedBox(width: 4),
+
+              PopupMenuButton<String>(
+                tooltip: "Account",
+                icon: Icon(Icons.more_vert, color: primaryText),
+                onSelected: (v) {
+                  if (v == "logout") _confirmLogout();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: "logout",
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, size: 18),
+                        SizedBox(width: 8),
+                        Text("Logout"),
+                      ],
+                    ),
                   ),
                 ],
               ),
+              const SizedBox(width: 6),
+            ],
+          ),
+
+          body: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Choose equipment type",
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "Monitor and manage your devices securely",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 18),
+
+                Expanded(
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: .60,
+                    children: [
+                      _ServiceCard(
+                        title: "Deep Freezer",
+                        subtitle: "Ultra-low monitoring",
+                        icon: Icons.ac_unit,
+                        onTap: () => _openDevices(context, "DEEP_FREEZER"),
+                      ),
+                      _ServiceCard(
+                        title: "BBR",
+                        subtitle: "Blood bank safety",
+                        icon: Icons.medical_services_outlined,
+                        onTap: () => _openDevices(context, "BBR"),
+                      ),
+                      _ServiceCard(
+                        title: "Platelet Incubator",
+                        subtitle: "Agitation + temp control",
+                        icon: Icons.science_outlined,
+                        onTap: () => _openDevices(context, "PLATELET"),
+                      ),
+                      _ServiceCard(
+                        title: "Walk-in Cooler",
+                        subtitle: "Cold room monitoring",
+                        icon: Icons.warehouse_outlined,
+                        onTap: () =>
+                            _openDevices(context, "WALK_IN_COOLER"),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+
+        /// ⏳ LOGOUT LOADER
+        if (_loggingOut)
+          Container(
+            color: Colors.black.withValues(alpha: 0.45),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+      ],
     );
   }
 }
+
+/* ---------------- THEME BUTTON & CARD (UNCHANGED) ---------------- */
 
 class _ThemeMenuButton extends StatelessWidget {
   const _ThemeMenuButton();
@@ -162,27 +322,16 @@ class _ServiceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              Text(title,
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
-
-              // ✅ Important fix: Expanded instead of Spacer()
               Expanded(
                 child: Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Align(
                 alignment: Alignment.bottomRight,
                 child: Icon(

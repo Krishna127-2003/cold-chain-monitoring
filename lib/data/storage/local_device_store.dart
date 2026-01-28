@@ -38,6 +38,11 @@ class LocalDeviceStore {
     }
   }
 
+  static Future<bool> hasAnyDevices() async {
+    await init(); // ensures SharedPreferences loaded
+    return _devices.isNotEmpty;
+  }
+
   static List<Map<String, dynamic>> getDevices({String? equipmentType}) {
     if (equipmentType == null) {
       return List<Map<String, dynamic>>.from(_devices);

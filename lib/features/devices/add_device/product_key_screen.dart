@@ -23,6 +23,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
   void _goNext({
     required String deviceId,
     required String equipmentType,
+    required String productKey,
   }) {
     Navigator.pushNamed(
       context,
@@ -30,6 +31,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
       arguments: {
         "deviceId": deviceId,
         "equipmentType": equipmentType,
+        "productKey": productKey, // ✅ PASS IT FOR STORAGE
       },
     );
   }
@@ -54,16 +56,19 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
             ),
             const SizedBox(height: 14),
 
+            /// ✅ Product Key Input
             TextField(
               controller: _keyController,
+              textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
                 labelText: "Product Key",
+                hintText: "XXXX-XXXX",
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 14),
 
-            /// ✅ Normal Verify Button
+            /// ✅ Verify Button
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -71,7 +76,9 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
                 onPressed: _loading
                     ? null
                     : () async {
-                        if (_keyController.text.trim().isEmpty) {
+                        final key = _keyController.text.trim();
+
+                        if (key.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text("Enter product key"),
@@ -82,7 +89,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
 
                         setState(() => _loading = true);
 
-                        // ✅ For now mock verify (later connect to Azure verify API)
+                        // 🔄 MOCK verification (replace with Azure later)
                         await Future.delayed(const Duration(milliseconds: 700));
 
                         setState(() => _loading = false);
@@ -90,6 +97,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
                         _goNext(
                           deviceId: deviceId,
                           equipmentType: equipmentType,
+                          productKey: key,
                         );
                       },
                 child: Text(_loading ? "Verifying..." : "Verify Product Key"),
@@ -98,7 +106,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
 
             const SizedBox(height: 12),
 
-            /// ✅ NEW: Skip Product Key button (Only for testing demo)
+            /// ✅ Demo Skip Button
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -112,6 +120,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
                   _goNext(
                     deviceId: deviceId,
                     equipmentType: equipmentType,
+                    productKey: "DEMO-KEY",
                   );
                 },
               ),
@@ -120,7 +129,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
             const SizedBox(height: 10),
 
             Text(
-              "Demo mode allows direct registration without product key.\nLater we will connect product key verification to backend.",
+              "Demo mode allows registration without verification.\nProduct key will be validated via backend later.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12.5,

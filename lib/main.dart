@@ -5,7 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'routes/app_routes.dart';
-import 'data/storage/local_device_store.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -16,12 +15,8 @@ Future<void> main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-    } else {
-      Firebase.app();
     }
   } catch (_) {}
-
-  await LocalDeviceStore.init();
 
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();

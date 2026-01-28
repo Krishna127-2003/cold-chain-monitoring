@@ -1,8 +1,13 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+
 import '../../../routes/app_routes.dart';
-import '../../../data/storage/local_device_store.dart';
+import '../../../data/models/registered_device.dart';
+import '../../../data/repository/device_repository.dart';
+import '../../../data/repository_impl/local_device_repository.dart';
+import '../../../data/session/session_manager.dart';
+import '../../../data/api/device_callback_api.dart';
 
 class RegisterDeviceScreen extends StatefulWidget {
   const RegisterDeviceScreen({super.key});
@@ -16,6 +21,8 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
   final TextEditingController _deptController = TextEditingController();
   final TextEditingController _areaController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
+
+  final DeviceRepository _deviceRepo = LocalDeviceRepository();
 
   bool _loading = false;
 
@@ -33,8 +40,9 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-    final deviceId = args?["deviceId"] ?? "UNKNOWN";
-    final equipmentType = args?["equipmentType"] ?? "UNKNOWN";
+    final String deviceId = args?["deviceId"] ?? "UNKNOWN";
+    final String equipmentType = args?["equipmentType"] ?? "UNKNOWN";
+    final String productKey = args?["productKey"] ?? "UNKNOWN";
 
     return Scaffold(
       appBar: AppBar(title: const Text("Register Device")),
@@ -45,6 +53,11 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             Text(
               "Registering Device: $deviceId",
               style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Service: ${equipmentType.replaceAll('_', ' ')}",
+              style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
 
@@ -84,20 +97,21 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             SizedBox(
               width: double.infinity,
+              height: 52,
               child: ElevatedButton(
                 onPressed: _loading
                     ? null
                     : () async {
                         if (_nameController.text.trim().isEmpty ||
                             _deptController.text.trim().isEmpty ||
-                            _pinController.text.trim().isEmpty) {
+                            _pinController.text.trim().length < 4) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Fill required fields"),
+                              content: Text("Fill required fields correctly"),
                             ),
                           );
                           return;
@@ -105,35 +119,49 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
 
                         setState(() => _loading = true);
 
-                        // ✅ MVP now: mock register delay
-                        await Future.delayed(const Duration(seconds: 1));
+                        final loginType =
+                            await SessionManager.getLoginType() ?? "guest";
 
-                        // ✅ Save device PERSISTENTLY (SharedPreferences)
-                        await LocalDeviceStore.addDevice({
-                          "deviceId": deviceId,
-                          "deviceName": _nameController.text.trim(),
-                          "equipmentType": equipmentType,
-                          "department": _deptController.text.trim(),
-                          "area": _areaController.text.trim(),
-                          "pin": _pinController.text.trim(), // ✅ REQUIRED (PIN saved)
-                          "status": "NORMAL",
-                          "lastUpdated": DateTime.now().toIso8601String(),
-                        });
+                        final email =
+                            await SessionManager.getEmail() ?? "guest";
+
+                        /// ✅ FINAL & CORRECT MODEL USAGE
+                        final device = RegisteredDevice(
+                          deviceId: deviceId,
+                          qrCode: deviceId, // QR = device id for now
+                          productKey: productKey,
+                          serviceType: equipmentType,
+                          email: email,
+                          loginType: loginType,
+                          registeredAt: DateTime.now().toUtc(),
+                        );
+
+                        await _deviceRepo.registerDevice(device);
+
+                        /// 🔔 CALLBACK (Vinay – POC)
+                        await DeviceCallbackApi.sendDeviceData(
+                          deviceId: deviceId,
+                          temperature: -18,
+                          humidity: 42.5,
+                          compressor: 1,
+                          defrost: 0,
+                          door: 0,
+                          power: 1,
+                          battery: 85,
+                        );
 
                         setState(() => _loading = false);
 
-                        // ✅ Navigate to dashboard
                         Navigator.pushNamedAndRemoveUntil(
                           context,
-                          AppRoutes.dashboard,
+                          AppRoutes.allDevices,
                           (route) => false,
-                          arguments: {
-                            "deviceId": deviceId,
-                            "equipmentType": equipmentType,
-                          },
                         );
                       },
-                child: Text(_loading ? "Registering..." : "Register Device"),
+                child: Text(
+                  _loading ? "Registering..." : "Register Device",
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
           ],
