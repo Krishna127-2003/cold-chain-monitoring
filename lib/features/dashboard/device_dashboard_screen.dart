@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/api/immediate_send_api.dart';
 import '../../core/utils/responsive.dart';
 import '../../data/api/android_data_api.dart';
 import '../devices/widgets/status_badge.dart';
@@ -29,6 +30,7 @@ class DeviceDashboardScreen extends StatefulWidget {
 
 class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   Timer? _alignedTimer;
+  Timer? _immediateSendTimer;
   bool _loading = false;
 
   Map<String, dynamic> _rawTelemetry = {};
@@ -66,6 +68,20 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     return (lowamp == "1" || highamp == "1") ? "ALARM" : "NORMAL";
   }
 
+  void _startImmediateSendPing() {
+    // Cancel if already running
+    _immediateSendTimer?.cancel();
+
+    // Fire immediately once
+    ImmediateSendApi.trigger(interval: 1);
+
+    // Then every 1 minute
+    _immediateSendTimer =
+        Timer.periodic(const Duration(minutes: 1), (_) {
+      ImmediateSendApi.trigger(interval: 1);
+    });
+  }
+
   void _startAlignedSchedule() {
     _alignedTimer?.cancel();
 
@@ -96,6 +112,10 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   @override
   void initState() {
     super.initState();
+
+    // User opened live dashboard → notify backend
+    _startImmediateSendPing();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _fetchLive();
       _startAlignedSchedule();
@@ -105,6 +125,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   @override
   void dispose() {
     _alignedTimer?.cancel();
+    _immediateSendTimer?.cancel();
     super.dispose();
   }
 

@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -5,6 +7,7 @@ import '../../routes/app_routes.dart';
 import '../../data/session/session_manager.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
+import '../../data/sync/device_sync_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -64,21 +67,63 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    final devices = await _deviceRepo.getRegisteredDevices(
-      email: email ?? "",
-      loginType: loginType,
-    );
+    // -------------------------
+    // 👤 GUEST USER
+    // -------------------------
+    if (loginType == "guest") {
+      final localDevices = await _deviceRepo.getRegisteredDevices(
+        email: "", // REQUIRED by interface
+        loginType: "guest",
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (devices.isEmpty) {
-      print("➡️ Splash → Services (no devices)");
-      _go(AppRoutes.services);
-    } else {
-      print("➡️ Splash → AllDevices (${devices.length})");
-      _go(AppRoutes.allDevices);
+      if (localDevices.isEmpty) {
+        print("➡️ Guest → Services");
+        _go(AppRoutes.services);
+      } else {
+        print("➡️ Guest → AllDevices (${localDevices.length})");
+        _go(AppRoutes.allDevices);
+      }
+      return;
     }
+
+    // -------------------------
+    // 🔐 GOOGLE USER
+    // -------------------------
+    if (loginType == "google" && email != null) {
+      print("🔄 Silent backend sync started");
+
+      final backendHasDevices = await DeviceSyncService.syncFromBackend(
+        email: email,
+        loginType: loginType,
+      );
+
+      final localDevices = await _deviceRepo.getRegisteredDevices(
+        email: email,
+        loginType: loginType,
+      );
+
+      if (!mounted) return;
+
+      if (backendHasDevices || localDevices.isNotEmpty) {
+        print("➡️ Google → AllDevices (${localDevices.length})");
+        _go(AppRoutes.allDevices);
+      } else {
+        print("➡️ Google → Services");
+        _go(AppRoutes.services);
+      }
+      return;
+    }
+
+    // -------------------------
+    // FALLBACK
+    // -------------------------
+    print("⚠️ Unknown state → Auth");
+    await SessionManager.logout();
+    _go(AppRoutes.auth);
   }
+
 
   void _go(String route) {
     if (!mounted) return;

@@ -7,7 +7,7 @@ import '../../../data/models/registered_device.dart';
 import '../../../data/repository/device_repository.dart';
 import '../../../data/repository_impl/local_device_repository.dart';
 import '../../../data/session/session_manager.dart';
-import '../../../data/api/device_callback_api.dart';
+import '../../../data/api/device_registration_api.dart';
 
 class RegisterDeviceScreen extends StatefulWidget {
   const RegisterDeviceScreen({super.key});
@@ -61,6 +61,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             ),
             const SizedBox(height: 16),
 
+            /// Device Name
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
@@ -70,6 +71,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             ),
             const SizedBox(height: 12),
 
+            /// Department
             TextField(
               controller: _deptController,
               decoration: const InputDecoration(
@@ -79,6 +81,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             ),
             const SizedBox(height: 12),
 
+            /// Area (optional)
             TextField(
               controller: _areaController,
               decoration: const InputDecoration(
@@ -88,6 +91,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             ),
             const SizedBox(height: 12),
 
+            /// PIN
             TextField(
               controller: _pinController,
               keyboardType: TextInputType.number,
@@ -99,6 +103,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             ),
             const SizedBox(height: 20),
 
+            /// REGISTER BUTTON
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -119,39 +124,42 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
 
                         setState(() => _loading = true);
 
+                        /// SESSION INFO
                         final loginType =
                             await SessionManager.getLoginType() ?? "guest";
-
                         final email =
                             await SessionManager.getEmail() ?? "guest";
 
-                        /// ✅ FINAL & CORRECT MODEL USAGE
+                        final now = DateTime.now().toUtc();
+
+                        /// ✅ LOCAL MODEL (SOURCE OF TRUTH)
                         final device = RegisteredDevice(
                           deviceId: deviceId,
-                          qrCode: deviceId, // QR = device id for now
+                          qrCode: deviceId, // QR = deviceId for now
                           productKey: productKey,
                           serviceType: equipmentType,
                           email: email,
                           loginType: loginType,
-                          registeredAt: DateTime.now().toUtc(),
+                          registeredAt: now,
                         );
 
+                        /// 1️⃣ SAVE LOCALLY (offline-safe)
                         await _deviceRepo.registerDevice(device);
 
-                        /// 🔔 CALLBACK (Vinay – POC)
-                        await DeviceCallbackApi.sendDeviceData(
+                        /// 2️⃣ SEND REGISTRATION CALLBACK TO AZURE
+                        await DeviceRegistrationApi.registerDevice(
+                          email: email,
+                          loginType: loginType,
                           deviceId: deviceId,
-                          temperature: -18,
-                          humidity: 42.5,
-                          compressor: 1,
-                          defrost: 0,
-                          door: 0,
-                          power: 1,
-                          battery: 85,
+                          qrCode: deviceId,
+                          productKey: productKey,
+                          serviceType: equipmentType,
+                          registeredAt: now,
                         );
 
                         setState(() => _loading = false);
 
+                        /// 3️⃣ GO TO SAVED DEVICES
                         Navigator.pushNamedAndRemoveUntil(
                           context,
                           AppRoutes.allDevices,

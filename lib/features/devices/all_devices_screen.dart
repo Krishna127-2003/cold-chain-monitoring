@@ -82,6 +82,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   @override
   void dispose() {
+    _hideSnackBar(); // ✅ final cleanup
     _tempTimer?.cancel();
     super.dispose();
   }
@@ -105,6 +106,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
       _loadingDevices = false;
     });
   }
+
+  void _hideSnackBar() {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.removeCurrentSnackBar(); // instant kill
+  }
+
+
 
   Future<void> _loadTemps() async {
     setState(() => _loadingTemps = true);
@@ -193,24 +201,31 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
     // ✅ Exit edit mode and refresh
     setState(() {
+      _devices.removeWhere(
+        (d) => _selected.contains(d.deviceId),
+      );
       _isEditMode = false;
       _selected.clear();
     });
 
-    // ✅ Undo SnackBar
-    ScaffoldMessenger.of(context).clearSnackBars();
+    // ✅ Undo SnackBar (production-grade)
+    _hideSnackBar(); // 1️⃣ kill any existing snackbar first
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 5), // ✅ auto dismiss
+        duration: const Duration(seconds: 4), // 2️⃣ auto-dismiss after 4 sec
+        behavior: SnackBarBehavior.floating,
         content: Text("${deletedBackup.length} device(s) deleted ✅"),
         action: SnackBarAction(
           label: "UNDO",
           onPressed: () async {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar(); // ✅ close instantly
+            _hideSnackBar(); // 3️⃣ disappear immediately on UNDO
+
             for (final d in deletedBackup) {
               await _deviceRepo.registerDevice(d);
             }
-            setState(() {});
+
+            await _loadDevices(); // 4️⃣ refresh UI
           },
         ),
       ),
@@ -218,6 +233,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   Future<void> _logout() async {
+    _hideSnackBar(); // 🔥 kill snackbar before leaving screen
+
     await GoogleAuthService.signOut();
     await SessionManager.logout(); // ✅ CLEAR SESSION
 
@@ -227,6 +244,31 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
       context,
       AppRoutes.auth,
       (route) => false,
+    );
+  }
+
+  void _showLogoutConfirm(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Logout"),
+        content: const Text(
+          "Are you sure you want to logout?\nYou will need to sign in again.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _logout();
+            },
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -272,7 +314,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
           // ✅ Logout always available
           IconButton(
-            onPressed: _logout,
+            onPressed: () => _showLogoutConfirm(context),
             icon: const Icon(Icons.logout),
             tooltip: "Logout",
           ),
@@ -284,7 +326,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
           ? null
           : FloatingActionButton(
               onPressed: () {
-                // ✅ Add device flow goes via Services screen
+                _hideSnackBar(); // ✅ kill snackbar
+
                 Navigator.pushNamed(
                   context,
                   AppRoutes.services,
@@ -323,6 +366,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                         if (_isEditMode) {
                           _toggleSelection(deviceId);
                         } else {
+                          _hideSnackBar(); // ✅ kill snackbar on screen change
+
                           Navigator.pushNamed(
                             context,
                             AppRoutes.dashboard,

@@ -11,6 +11,10 @@ import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import 'google_auth_service.dart';
 import '../../data/session/session_manager.dart'; // ✅ NEW
+import '../../data/sync/device_sync_service.dart';
+import '../../data/repository/device_repository.dart';
+import '../../data/repository_impl/local_device_repository.dart';
+
 
 
 class AuthScreen extends StatefulWidget {
@@ -22,9 +26,12 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen>
     with SingleTickerProviderStateMixin {
+
   late final AnimationController _controller;
   late final Animation<double> _fade;
   late final Animation<Offset> _slide;
+  final DeviceRepository _deviceRepo = LocalDeviceRepository();
+
 
   bool _loadingGoogle = false;
   bool _loadingGuest = false;
@@ -79,17 +86,38 @@ class _AuthScreenState extends State<AuthScreen>
       return;
     }
 
-     /// ✅ SAVE LOGIN SESSION
+    final email = userCredential.user!.email!;
+
+    /// ✅ 1. SAVE SESSION FIRST
     await SessionManager.saveLogin(
       loginType: "google",
-      email: userCredential.user?.email,
+      email: email,
+    );
+
+    /// ✅ 2. SYNC BACKEND DEVICES (THIS WAS MISSING)
+    final backendHasDevices = await DeviceSyncService.syncFromBackend(
+      email: email,
+      loginType: "google",
+    );
+
+    /// ✅ 3. CHECK LOCAL DEVICES AFTER SYNC
+    final localDevices = await _deviceRepo.getRegisteredDevices(
+      email: email,
+      loginType: "google",
     );
 
     setState(() => _loadingGoogle = false);
 
-    // ✅ Success → go to services screen
-    await _goNext();
+    if (!mounted) return;
+
+    /// ✅ 4. NAVIGATE CORRECTLY
+    if (backendHasDevices || localDevices.isNotEmpty) {
+      Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
+    } else {
+      Navigator.pushReplacementNamed(context, AppRoutes.services);
+    }
   }
+
 
   Future<void> _onGuestPressed() async {
     setState(() => _loadingGuest = true);
