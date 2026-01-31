@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: unnecessary_type_check
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import '../../data/api/android_data_api.dart';
 import 'widgets/status_row.dart';
 import 'widgets/dashboard_top_bar.dart';
+import 'models/device_status.dart';
+import 'utils/device_status_mapper.dart';
 
 class DeepFreezerDashboardScreen extends StatefulWidget {
   final String deviceId;
-
   const DeepFreezerDashboardScreen({super.key, required this.deviceId});
 
   @override
@@ -17,141 +18,45 @@ class DeepFreezerDashboardScreen extends StatefulWidget {
       _DeepFreezerDashboardScreenState();
 }
 
-class _DeepFreezerDashboardScreenState extends State<DeepFreezerDashboardScreen> {
+class _DeepFreezerDashboardScreenState
+    extends State<DeepFreezerDashboardScreen> {
   Timer? _timer;
+  DeviceStatus? _status;
   bool _loading = false;
-
-  /// ✅ Complete raw telemetry from API
-  Map<String, dynamic> _data = {};
-
-  /// ✅ Convert raw value into readable string (generic)
-  String _formatValue(String key, dynamic value) {
-    if (value == null) return "--";
-
-    final s = value.toString().trim();
-    if (s.isEmpty) return "--";
-
-    // ✅ temp formatting
-    if (key.toLowerCase() == "pv" || key.toLowerCase() == "sv") {
-      if (s.contains("°")) return s;
-      return "$s°C";
-    }
-
-    // ✅ timestamp formatting (keep as is for now)
-    if (key.toLowerCase() == "timestamp") return s;
-
-    // ✅ binary flag formatting
-    if (s == "1") {
-      if (key.toLowerCase() == "door") return "OPEN";
-      return "ON";
-    }
-    if (s == "0") {
-      if (key.toLowerCase() == "door") return "CLOSED";
-      return "OFF";
-    }
-
-    // ✅ battery %
-    if (key.toLowerCase() == "battery") {
-      return s.contains("%") ? s : "$s%";
-    }
-
-    return s;
-  }
-
-  /// ✅ Better labels instead of raw key names
-  String _prettyLabel(String key) {
-    final k = key.toLowerCase();
-
-    switch (k) {
-      case "pv":
-        return "PV";
-      case "sv":
-        return "SV";
-      case "compressor":
-        return "Compressor";
-      case "defrost":
-        return "Defrost Auto";
-      case "probe":
-        return "Probe";
-      case "door":
-        return "Door";
-      case "battery":
-        return "Battery";
-      case "power":
-        return "Power";
-      case "lowamp":
-        return "Low Amp Alarm";
-      case "highamp":
-        return "High Amp Alarm";
-      case "timestamp":
-        return "Timestamp";
-      default:
-        // Convert snake/camel to readable
-        return key
-            .replaceAll("_", " ")
-            .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => "${m[1]} ${m[2]}")
-            .toUpperCase();
-    }
-  }
-
-  /// ✅ Icon mapping for known keys
-  IconData _iconForKey(String key) {
-    final k = key.toLowerCase();
-    switch (k) {
-      case "compressor":
-        return Icons.settings;
-      case "defrost":
-        return Icons.ac_unit;
-      case "probe":
-        return Icons.thermostat;
-      case "door":
-        return Icons.door_front_door_outlined;
-      case "battery":
-        return Icons.battery_full;
-      case "power":
-        return Icons.power_settings_new;
-      case "pv":
-      case "sv":
-        return Icons.device_thermostat;
-      case "timestamp":
-        return Icons.schedule;
-      default:
-        return Icons.info_outline;
-    }
-  }
-
-  /// ✅ Determine good/bad indicator automatically
-  bool _isGood(String key, String v) {
-    final k = key.toLowerCase();
-
-    if (k == "door") return v.toUpperCase() == "CLOSED";
-    if (k == "probe") return v.toUpperCase() == "ON" || v.toUpperCase() == "OK";
-
-    // alarms: lowamp/highamp 1 means alarm, so bad
-    if (k == "lowamp" || k == "highamp") return v != "ON";
-
-    // general ON/OFF values: ON is usually good
-    if (v.toUpperCase() == "ON") return true;
-    if (v.toUpperCase() == "OFF") return false;
-
-    return true;
-  }
 
   Future<void> _fetch() async {
     if (_loading) return;
     setState(() => _loading = true);
 
-    final data = await AndroidDataApi.fetchLatest();
-
+    final raw = await AndroidDataApi.fetchLatest();
     if (!mounted) return;
 
-    if (data == null) {
-      setState(() => _loading = false);
-      return;
+    Map<String, dynamic>? deviceData;
+    if (raw != null) {
+      // CASE 1: API returns map keyed by deviceId
+      if (raw[widget.deviceId] is Map) {
+        deviceData = Map<String, dynamic>.from(raw[widget.deviceId]);
+      }
+      // CASE 2: API returns list of devices
+      else if (raw["devices"] is List) {
+        for (final item in raw["devices"]) {
+          if (item is Map) {
+            final id = (item["deviceId"] ?? item["id"] ?? "").toString();
+            if (id == widget.deviceId) {
+              deviceData = Map<String, dynamic>.from(item);
+              break;
+            }
+          }
+        }
+      }
+      // CASE 3: API returns direct device data (fallback)
+      else if (raw is Map && raw.containsKey("mixbit12")) {
+        deviceData = raw;
+      }
     }
 
     setState(() {
-      _data = Map<String, dynamic>.from(data);
+      _status = deviceData == null ? null : DeviceStatusMapper.fromApi(deviceData);
       _loading = false;
     });
   }
@@ -159,14 +64,8 @@ class _DeepFreezerDashboardScreenState extends State<DeepFreezerDashboardScreen>
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _fetch();
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      await _fetch();
-    });
+    _fetch();
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _fetch());
   }
 
   @override
@@ -175,171 +74,149 @@ class _DeepFreezerDashboardScreenState extends State<DeepFreezerDashboardScreen>
     super.dispose();
   }
 
-  /// ✅ build list of rows dynamically (no duplicates)
-  List<Widget> _buildDynamicRows() {
-    if (_data.isEmpty) {
-      return [
-        const StatusRow(
-          icon: Icons.info_outline,
-          label: "No data",
-          value: "--",
-          isGood: true,
-        ),
-      ];
-    }
-
-    final shown = <String>{};
-    final rows = <Widget>[];
-
-    _data.forEach((key, value) {
-      final normalizedKey = key.toLowerCase().trim();
-      if (shown.contains(normalizedKey)) return;
-      shown.add(normalizedKey);
-
-      // ✅ Skip PV/SV because shown in big section (if present)
-      if (normalizedKey == "pv" || normalizedKey == "sv") return;
-
-      final formatted = _formatValue(key, value);
-
-      rows.add(
-        StatusRow(
-          icon: _iconForKey(key),
-          label: _prettyLabel(key),
-          value: formatted,
-          isGood: _isGood(key, formatted),
-        ),
-      );
-    });
-
-    return rows;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final pv = _formatValue("pv", _data["pv"]);
-    final sv = _formatValue("sv", _data["sv"]);
-    final power = _formatValue("power", _data["power"]);
-    final battery = _formatValue("battery", _data["battery"]);
+    final s = _status;
+
+    String compressorText() {
+      if (s == null || !s.compressorOn) return "OFF";
+      if (s.lowAmp) return "ON   0.0A  LOW AMP";
+      if (s.highAmp) return "ON   0.0A  HIGH AMP";
+      return "ON   0.0A";
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
-
-      /// ✅ TOP BAR shows power + battery dynamically
       appBar: DashboardTopBar(
-        powerText: "Power: $power",
-        batteryText: battery,
+        powerText: s == null
+            ? "Power: --"
+            : "Power: ${s.powerOn ? "ON" : "OFF"}",
+        batteryText: s == null
+            ? "0%"
+            : "${s.batteryPercent}%",
       ),
 
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          children: [
+            const SizedBox(height: 18),
 
-          final maxContentWidth = w > 600 ? 520.0 : w;
-
-          double titleSize = w < 360 ? 30 : (w < 450 ? 38 : 44);
-          double pvSize = w < 360 ? 52 : (w < 450 ? 62 : 70);
-          double svSize = w < 360 ? 28 : (w < 450 ? 32 : 36);
-
-          return Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxContentWidth),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 18),
-
-                    Text(
-                      "DEEP FREEZER",
-                      style: TextStyle(
-                        fontSize: titleSize,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF60A5FA),
-                        letterSpacing: 2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    if (_loading)
-                      Text(
-                        "Fetching latest data...",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-
-                    const SizedBox(height: 14),
-
-                    /// ✅ Show PV only if API has it
-                    if (_data.containsKey("pv")) ...[
-                      const Text(
-                        "PV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          pv,
-                          style: TextStyle(
-                            fontSize: pvSize,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF22C55E),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    /// ✅ Show SV only if API has it
-                    if (_data.containsKey("sv")) ...[
-                      const Text(
-                        "SV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        sv,
-                        style: TextStyle(
-                          fontSize: svSize,
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF38BDF8),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-                    Divider(color: Colors.white.withOpacity(0.12), height: 1),
-                    const SizedBox(height: 10),
-
-                    /// ✅ Auto-generated rows (whatever URL returns)
-                    Column(
-                      children: _buildDynamicRows(),
-                    ),
-
-                    const SizedBox(height: 26),
-                    Text(
-                      "Device ID: ${widget.deviceId}",
-                      style: const TextStyle(color: Colors.white38),
-                    ),
-                    const SizedBox(height: 22),
-                  ],
-                ),
+            const Text(
+              "DEEP FREEZER",
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF60A5FA),
+                letterSpacing: 2,
               ),
             ),
-          );
-        },
+
+            const SizedBox(height: 20),
+
+            if (s?.pv != null) ...[
+              const Text("PV",
+                  style: TextStyle(color: Colors.white70, fontSize: 18)),
+              const SizedBox(height: 6),
+              Text(
+                "${s!.pv!.toStringAsFixed(1)}°C",
+                style: const TextStyle(
+                  fontSize: 64,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF22C55E),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            if (s?.sv != null)
+              Text(
+                "SV  ${s!.sv!.toStringAsFixed(1)}°C",
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF38BDF8),
+                ),
+              ),
+
+            const SizedBox(height: 22),
+            Divider(color: Colors.white.withValues(alpha: 0.12)),
+            const SizedBox(height: 10),
+
+            /// 1️⃣ SYSTEM
+            StatusRow(
+              icon: Icons.memory,
+              label: "System",
+              value: s == null
+                  ? "--"
+                  : (s.systemOk ? "HEALTHY" : "FAILURE"),
+              isGood: s?.systemOk ?? true,
+            ),
+
+            /// 2️⃣ COMPRESSOR
+            StatusRow(
+              icon: Icons.settings,
+              label: "Compressor",
+              value: compressorText(),
+              isGood: s?.compressorOn ?? false,
+            ),
+
+            /// 3️⃣ POWER
+            StatusRow(
+              icon: Icons.power_settings_new,
+              label: "Power",
+              value: s?.powerOn == true ? "ON" : "OFF",
+              isGood: s?.powerOn ?? false,
+            ),
+
+            /// 4️⃣ PROBE
+            StatusRow(
+              icon: Icons.thermostat,
+              label: "Probe",
+              value: s?.probeOk == true ? "OK" : "FAIL",
+              isGood: s?.probeOk ?? false,
+            ),
+
+            /// 5️⃣ ALARM
+            StatusRow(
+              icon: Icons.notifications_active,
+              label: "Alarm",
+              value: s == null
+                  ? "--"
+                  : s.alarmActive
+                      ? (s.alarmMuted ? "MUTE" : "ACTIVE")
+                      : "OFF",
+              isGood: !(s?.alarmActive ?? false),
+            ),
+
+            /// 6️⃣ DOOR
+            StatusRow(
+              icon: Icons.door_front_door,
+              label: "Door",
+              value: s?.doorClosed == true ? "CLOSED" : "OPEN",
+              isGood: s?.doorClosed ?? true,
+            ),
+
+            /// 7️⃣ UPDATED
+            StatusRow(
+              icon: Icons.schedule,
+              label: "Updated",
+              value: s?.updatedAt?.toIso8601String() ?? "--",
+              isGood: true,
+            ),
+
+            const SizedBox(height: 20),
+
+            /// 8️⃣ DEVICE ID
+            Text(
+              "Device ID: ${widget.deviceId}",
+              style: const TextStyle(color: Colors.white38),
+            ),
+
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
     );
   }

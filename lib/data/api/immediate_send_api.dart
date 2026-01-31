@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 class ImmediateSendApi {
   static const String _url =
-      "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/ImmediateSend?interval=7";
+      "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/ImmediateSend?interval=19";
 
   static Future<void> trigger({required int interval}) async {
     try {

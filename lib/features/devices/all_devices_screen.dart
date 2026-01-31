@@ -127,33 +127,69 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     });
   }
 
-  /// ✅ ONLY REQUIRED ADDITION: Helper to get temp from API response
-  String? _getTempForDevice(String deviceId) {
-    // CASE 1: API returns list of devices
+  String _getSystemStatusForDevice(String deviceId) {
+    Map<String, dynamic>? d;
+
+    // CASE 1: API returns list
     if (_latestData["devices"] is List) {
-      final list = _latestData["devices"] as List;
-      for (final item in list) {
+      for (final item in _latestData["devices"]) {
         if (item is Map) {
           final id = (item["deviceId"] ?? item["id"] ?? "").toString();
           if (id == deviceId) {
-            final t = item["temp"] ?? item["temperature"];
-            if (t == null) return null;
-            return t.toString();
+            d = Map<String, dynamic>.from(item);
+            break;
           }
         }
       }
     }
 
     // CASE 2: API returns map keyed by deviceId
-    if (_latestData[deviceId] is Map) {
-      final d = _latestData[deviceId] as Map;
-      final t = d["temp"] ?? d["temperature"];
-      if (t == null) return null;
-      return t.toString();
+    if (d == null && _latestData[deviceId] is Map) {
+      d = Map<String, dynamic>.from(_latestData[deviceId]);
     }
+
+    if (d == null) return "UNKNOWN";
+
+    // 🔴 System error bit = mixbit12
+    final systemErr = d["mixbit12"]?.toString() == "1";
+
+    return systemErr ? "FAILURE" : "HEALTHY";
+  }
+
+
+ String? _getTempForDevice(String deviceId) {
+    Map<String, dynamic>? deviceData;
+
+    // CASE 1: API returns list of devices
+    if (_latestData["devices"] is List) {
+      for (final item in _latestData["devices"]) {
+        if (item is Map) {
+          final id = (item["deviceId"] ?? item["id"] ?? "").toString();
+          if (id == deviceId) {
+            deviceData = Map<String, dynamic>.from(item);
+            break;
+          }
+        }
+      }
+    }
+
+    // CASE 2: API returns flat map for single device
+    if (deviceData == null && _latestData.isNotEmpty) {
+      deviceData = _latestData;
+    }
+
+    if (deviceData == null) return null;
+
+    // 🔥 PRIORITY LOGIC
+    final temp = deviceData["temp"] ?? deviceData["temperature"];
+    if (temp != null) return temp.toString();
+
+    final pv = deviceData["pv"];
+    if (pv != null) return pv.toString();
 
     return null;
   }
+
 
   Future<bool> _confirmDelete(BuildContext context, int count) async {
     final result = await showDialog<bool>(
@@ -351,7 +387,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                   final deviceName = d.deviceId; // until you add a name field
                   final dept = "-";              // placeholder
                   final equipmentType = d.serviceType;
-                  final status = "NORMAL";
+                  final status = _getSystemStatusForDevice(deviceId);
+
 
                   final selected = _selected.contains(deviceId);
 
