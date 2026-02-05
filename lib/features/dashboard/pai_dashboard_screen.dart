@@ -4,8 +4,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/api/android_data_api.dart';
+import '../notifications/notification_service.dart';
 import 'widgets/status_row.dart';
 import 'widgets/dashboard_top_bar.dart';
+import 'widgets/last_sync_row.dart';
+import '../notifications/alert_engine.dart';
+import '../notifications/alert_settings.dart';
+import '../notifications/alert_settings_storage.dart';
 
 class PaiDashboardScreen extends StatefulWidget {
   final String deviceId;
@@ -19,112 +24,70 @@ class PaiDashboardScreen extends StatefulWidget {
 class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
   Timer? _timer;
   bool _loading = false;
+  DateTime? _lastSync;
+  final AlertEngine _alertEngine = AlertEngine();
+  AlertSettings? _settings;
 
   Map<String, dynamic> _data = {};
 
-  String _formatValue(String key, dynamic value) {
-    if (value == null) return "--";
-    final s = value.toString().trim();
-    if (s.isEmpty) return "--";
+  double? _double(String k) =>
+      double.tryParse(_data[k]?.toString() ?? "");
 
-    if (key.toLowerCase() == "pv" || key.toLowerCase() == "sv") {
-      if (s.contains("°")) return s;
-      return "$s°C";
+  int _int(String k) =>
+      int.tryParse(_data[k]?.toString() ?? "") ?? 0;
+
+  // ======================
+  // 🚨 SMART ALARM ENGINE
+  // ======================
+
+  String alarmText() {
+    final battery = _int("battery");
+    final pv = _double("pv");
+    final sv = _double("sv");
+
+    if (battery > 0 && battery < 20) {
+      return "LOW BATTERY";
     }
 
-    if (key.toLowerCase() == "battery") {
-      return s.contains("%") ? s : "$s%";
+    if (pv != null && sv != null && pv > sv + 1.5) {
+      return "HIGH TEMP";
     }
 
-    if (key.toLowerCase() == "timestamp") return s;
-
-    if (s == "1") {
-      if (key.toLowerCase() == "door") return "OPEN";
-      return "ON";
-    }
-    if (s == "0") {
-      if (key.toLowerCase() == "door") return "CLOSED";
-      return "OFF";
+    if (pv != null && sv != null && pv < sv - 1.5) {
+      return "LOW TEMP";
     }
 
-    return s;
+    return "NORMAL";
   }
 
-  String _prettyLabel(String key) {
-    final k = key.toLowerCase();
-    switch (k) {
-      case "pv":
-        return "PV";
-      case "sv":
-        return "SV";
-      case "agitator":
-        return "Agitator";
-      case "compressor":
-        return "Compressor";
-      case "heater":
-        return "Heater";
-      case "probe":
-        return "Probe";
-      case "door":
-        return "Door";
-      case "battery":
-        return "Battery";
-      case "power":
-        return "Power";
-      case "timestamp":
-        return "Timestamp";
+  Color alarmColor() {
+    switch (alarmText()) {
+      case "HIGH TEMP":
+        return Colors.redAccent;
+      case "LOW TEMP":
+        return Colors.lightBlueAccent;
+      case "LOW BATTERY":
+        return Colors.orangeAccent;
       default:
-        return key
-            .replaceAll("_", " ")
-            .replaceAllMapped(
-              RegExp(r'([a-z])([A-Z])'),
-              (m) => "${m[1]} ${m[2]}",
-            )
-            .toUpperCase();
+        return Colors.greenAccent;
     }
   }
 
-  IconData _iconForKey(String key) {
-    final k = key.toLowerCase();
-    switch (k) {
-      case "agitator":
-        return Icons.sync;
-      case "compressor":
-        return Icons.settings;
-      case "heater":
-        return Icons.local_fire_department_outlined;
-      case "probe":
-        return Icons.thermostat;
-      case "door":
-        return Icons.door_front_door_outlined;
-      case "battery":
-        return Icons.battery_full;
-      case "power":
-        return Icons.power_settings_new;
-      case "pv":
-      case "sv":
-        return Icons.device_thermostat;
-      case "timestamp":
-        return Icons.schedule;
-      default:
-        return Icons.info_outline;
-    }
+  // ======================
+
+  String tempValue(String k) {
+    final v = _double(k);
+    if (v == null) return "--";
+    return "${v.toStringAsFixed(1)}°C";
   }
 
-  bool _isGood(String key, String v) {
-    final k = key.toLowerCase();
-    if (k == "door") return v.toUpperCase() == "CLOSED";
-    if (v.toUpperCase() == "ON") return true;
-    if (v.toUpperCase() == "OFF") return false;
-    return true;
-  }
+  String onOff(String k) => _int(k) == 1 ? "ON" : "OFF";
 
   Future<void> _fetch() async {
     if (_loading) return;
     setState(() => _loading = true);
 
-    final data = await AndroidDataApi.fetchLatest();
-
+    final data = await AndroidDataApi.fetchByDeviceId(widget.deviceId);
     if (!mounted) return;
 
     if (data == null) {
@@ -135,57 +98,47 @@ class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
     setState(() {
       _data = Map<String, dynamic>.from(data);
       _loading = false;
+      _lastSync = DateTime.now();
     });
+
+    final pv = _double("pv");
+    final sv = _double("sv");
+
+    if (_settings != null && pv != null && sv != null) {
+      final shouldAlert = _alertEngine.shouldTrigger(
+        pv: pv,
+        sv: sv,
+        settings: _settings!,
+      );
+
+      if (shouldAlert) {
+        await NotificationService.send(
+          "Cold Chain Alert",
+          "Temperature is abnormal for extended time",
+        );
+      }
+    }
   }
 
-  List<Widget> _buildDynamicRows() {
-    if (_data.isEmpty) {
-      return const [
-        StatusRow(
-          icon: Icons.info_outline,
-          label: "No data",
-          value: "--",
-          isGood: true,
-        ),
-      ];
-    }
+  Future<void> _loadAlertSettings() async {
+    final data = await AlertSettingsStorage.load();
 
-    final shown = <String>{};
-    final rows = <Widget>[];
-
-    _data.forEach((key, value) {
-      final normalizedKey = key.toLowerCase().trim();
-      if (shown.contains(normalizedKey)) return;
-      shown.add(normalizedKey);
-
-      if (normalizedKey == "pv" || normalizedKey == "sv") return;
-
-      final formatted = _formatValue(key, value);
-
-      rows.add(
-        StatusRow(
-          icon: _iconForKey(key),
-          label: _prettyLabel(key),
-          value: formatted,
-          isGood: _isGood(key, formatted),
-        ),
+    setState(() {
+      _settings = AlertSettings(
+        app: data["app"],
+        email: data["email"],
+        sms: data["sms"],
+        level: data["level"],
       );
     });
-
-    return rows;
   }
 
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _fetch();
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      await _fetch();
-    });
+    _fetch();
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _fetch());
+    _loadAlertSettings();
   }
 
   @override
@@ -196,123 +149,127 @@ class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pv = _formatValue("pv", _data["pv"]);
-    final sv = _formatValue("sv", _data["sv"]);
-    final power = _formatValue("power", _data["power"]);
-    final battery = _formatValue("battery", _data["battery"]);
+    final pv = tempValue("pv");
+    final sv = tempValue("sv");
+    final power = onOff("power");
+    final battery = _int("battery");
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
+        deviceId: widget.deviceId,
         powerText: "Power: $power",
-        batteryText: battery,
+        batteryText: battery == 0 ? "--%" : "$battery%",
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          children: [
+            const SizedBox(height: 18),
 
-          final maxContentWidth = w > 600 ? 520.0 : w;
-          double titleSize = w < 360 ? 18 : (w < 450 ? 22 : 24);
-          double pvSize = w < 360 ? 52 : (w < 450 ? 62 : 70);
-          double svSize = w < 360 ? 28 : (w < 450 ? 32 : 36);
+            const Text(
+              "PLATELET AGITATOR INCUBATOR",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF60A5FA),
+                letterSpacing: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxContentWidth),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 18),
+            const SizedBox(height: 14),
 
-                    Text(
-                      "PLATELET AGITATOR INCUBATOR",
-                      style: TextStyle(
-                        fontSize: titleSize,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF60A5FA),
-                        letterSpacing: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    if (_loading)
-                      Text(
-                        "Fetching latest data...",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-
-                    const SizedBox(height: 14),
-
-                    if (_data.containsKey("pv")) ...[
-                      const Text(
-                        "PV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          pv,
-                          style: TextStyle(
-                            fontSize: pvSize,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF22C55E),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    if (_data.containsKey("sv")) ...[
-                      const Text(
-                        "SV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        sv,
-                        style: TextStyle(
-                          fontSize: svSize,
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF38BDF8),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-                    Divider(color: Colors.white.withOpacity(0.12), height: 1),
-                    const SizedBox(height: 10),
-
-                    Column(
-                      children: _buildDynamicRows(),
-                    ),
-
-                    const SizedBox(height: 26),
-                    Text(
-                      "Device ID: ${widget.deviceId}",
-                      style: const TextStyle(color: Colors.white38),
-                    ),
-                    const SizedBox(height: 22),
-                  ],
-                ),
+            const Text("PV",
+                style: TextStyle(color: Colors.white70, fontSize: 18)),
+            const SizedBox(height: 6),
+            Text(
+              pv,
+              style: const TextStyle(
+                fontSize: 64,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF22C55E),
               ),
             ),
-          );
-        },
+
+            const SizedBox(height: 10),
+
+            Text(
+              "SV  $sv",
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF38BDF8),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            LastSyncRow(
+              lastSync: _lastSync,
+              loading: _loading,
+            ),
+
+            const SizedBox(height: 22),
+            Divider(color: Colors.white.withOpacity(0.12)),
+            const SizedBox(height: 10),
+
+            StatusRow(
+              icon: Icons.sync,
+              label: "Agitator",
+              value: onOff("agitator"),
+              isGood: _int("agitator") == 1,
+            ),
+
+            StatusRow(
+              icon: Icons.settings,
+              label: "Compressor",
+              value: onOff("compressor"),
+              isGood: _int("compressor") == 1,
+            ),
+
+            StatusRow(
+              icon: Icons.local_fire_department_outlined,
+              label: "Heater",
+              value: onOff("heater"),
+              isGood: _int("heater") == 0,
+            ),
+
+            StatusRow(
+              icon: Icons.thermostat,
+              label: "Probe",
+              value: _int("probe") == 1 ? "OK" : "FAIL",
+              isGood: _int("probe") == 1,
+            ),
+
+            // 🚨 SMART ALARM ROW
+            StatusRow(
+              icon: Icons.notifications_active,
+              label: "Alarm",
+              value: alarmText(),
+              valueColor: alarmColor(),
+              isGood: alarmText() == "NORMAL",
+            ),
+
+            StatusRow(
+              icon: Icons.battery_full,
+              label: "Battery",
+              value: battery == 0 ? "--%" : "$battery%",
+              valueColor:
+                  battery < 20 ? Colors.orangeAccent : Colors.greenAccent,
+              isGood: battery >= 20,
+            ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              "Device ID: ${widget.deviceId}",
+              style: const TextStyle(color: Colors.white38),
+            ),
+
+            const SizedBox(height: 28),
+          ],
+        ),
       ),
     );
   }

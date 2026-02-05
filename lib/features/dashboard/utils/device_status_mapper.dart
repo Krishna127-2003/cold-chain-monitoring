@@ -1,59 +1,73 @@
 import '../models/device_status.dart';
 
 class DeviceStatusMapper {
+  static int _int(dynamic v) =>
+      int.tryParse(v?.toString() ?? "") ?? 0;
 
-  static int _battery(dynamic v) {
-    final n = int.tryParse(v?.toString() ?? "");
-    return n ?? 0;
+  static double? _double(dynamic v) =>
+      double.tryParse(v?.toString() ?? "");
+
+  static bool _isBitSet(int value, int bit) {
+    return (value & (1 << bit)) != 0;
   }
 
-  static bool _bit(Map<String, dynamic> raw, int index) {
-    return raw["mixbit$index"]?.toString() == "1";
-  }
-
-  static double? _num(dynamic v) {
+  static DateTime? _parseDate(dynamic v) {
     if (v == null) return null;
-    return double.tryParse(v.toString());
+
+    final s = v.toString(); // "03/02/2026 01:23:41"
+    final parts = s.split(' ');
+    if (parts.length != 2) return null;
+
+    final d = parts[0].split('/');
+    final t = parts[1].split(':');
+    if (d.length != 3 || t.length != 3) return null;
+
+    return DateTime(
+      int.parse(d[2]), // year
+      int.parse(d[1]), // month
+      int.parse(d[0]), // day
+      int.parse(t[0]),
+      int.parse(t[1]),
+      int.parse(t[2]),
+    );
   }
 
   static DeviceStatus fromApi(Map<String, dynamic> raw) {
-    final systemErr = _bit(raw, 12);
+    final status = _int(raw["status"]);
+    final error = _int(raw["Error"]);
 
-    final compressorOn = _bit(raw, 0);
-    final lowAmp = _bit(raw, 10);
-    final highAmp = _bit(raw, 11);
-
-    final powerOn = _bit(raw, 7);
-    final batteryPercent =
-        _battery(raw["battery"] ?? raw["battery_percent"] ?? raw["batteryLevel"]);
-
-    final probeFail = _bit(raw, 3);
-
-    final alarmMuted = _bit(raw, 4);
-    final co2Active = _bit(raw, 13);
-
-    final doorOpen = raw["door"]?.toString() == "1";
+    final powerOn = _int(raw["pwron"]) == 1;
 
     return DeviceStatus(
-      systemOk: !systemErr,
+      // SYSTEM
+      systemOk: error == 0,
 
-      compressorOn: compressorOn,
-      lowAmp: lowAmp,
-      highAmp: highAmp,
+      // COMPRESSOR (example logic)
+      compressorOn: powerOn,
 
+      lowAmp: _isBitSet(status, 4),
+      highAmp: _isBitSet(status, 5),
+
+      // POWER
       powerOn: powerOn,
-      batteryPercent: batteryPercent, // 🔋 HERE
-      probeOk: !probeFail,
 
-      alarmActive: co2Active,
-      alarmMuted: alarmMuted,
+      // PROBE
+      probeOk: !_isBitSet(status, 3),
 
-      doorClosed: !doorOpen,
+      // ALARM
+      alarmActive: error != 0,
+      alarmMuted: false,
 
-      pv: _num(raw["pv"] ?? raw["temp"]),
-      sv: _num(raw["sv"]),
+      // DOOR (not available yet)
+      doorClosed: true,
 
-      updatedAt: DateTime.tryParse(raw["timestamp"] ?? ""),
+      // VALUES
+      pv: _double(raw["temp"]),
+      sv: _double(raw["setv"]),
+
+      batteryPercent: _int(raw["battery"]),
+
+      updatedAt: _parseDate(raw["timestamp"]),
     );
   }
 }

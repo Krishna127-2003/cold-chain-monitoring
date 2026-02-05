@@ -9,7 +9,6 @@ import '../../core/utils/responsive.dart';
 import '../../data/api/android_data_api.dart';
 import '../devices/widgets/status_badge.dart';
 import 'widgets/telemetry_tile.dart';
-import 'widgets/temperature_chart.dart';
 import 'widgets/dashboard_top_bar.dart';
 
 import 'utils/telemetry_mapper.dart';
@@ -42,7 +41,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     if (_loading) return;
     setState(() => _loading = true);
 
-    final data = await AndroidDataApi.fetchLatest();
+    final data = await AndroidDataApi.fetchByDeviceId(widget.deviceId);
 
     if (!mounted) return;
 
@@ -69,16 +68,20 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   }
 
   void _startImmediateSendPing() {
-    // Cancel if already running
     _immediateSendTimer?.cancel();
 
-    // Fire immediately once
-    ImmediateSendApi.trigger(interval: 1);
+    // Fire immediately
+    ImmediateSendApi.trigger(
+      interval: 3, // Changed to 3 as per backend example
+      deviceId: widget.deviceId, // This is a String, which now matches the API
+    );
 
-    // Then every 1 minute
-    _immediateSendTimer =
-        Timer.periodic(const Duration(minutes: 1), (_) {
-      ImmediateSendApi.trigger(interval: 1);
+    // Then every 1 minute to keep the device in 'Live' mode
+    _immediateSendTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      ImmediateSendApi.trigger(
+        interval: 3, 
+        deviceId: widget.deviceId,
+      );
     });
   }
 
@@ -231,29 +234,6 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                   subtitle: isGood ? "Normal" : "Attention",
                 );
               },
-            ),
-
-            const SizedBox(height: 18),
-
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text("Temperature History"),
-                    SizedBox(height: 12),
-                    TemperatureChart(
-                      points: [-26, -25, -24, -26, -27, -25],
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      "History API will be connected later",
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ],
         ),

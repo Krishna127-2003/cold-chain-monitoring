@@ -50,6 +50,33 @@ class _QrScanScreenState extends State<QrScanScreen>
     )..repeat(reverse: true);
   }
 
+  /// ✅ Extract deviceId from QR content
+  /// Supports:
+  /// 1. Full URL with device_id query
+  /// 2. Plain numeric ID (fallback)
+  String? _extractDeviceId(String raw) {
+    final value = raw.trim();
+
+    // CASE 1: URL with device_id
+    try {
+      final uri = Uri.tryParse(value);
+      if (uri != null && uri.queryParameters.containsKey("device_id")) {
+        final id = uri.queryParameters["device_id"];
+        if (id != null && id.isNotEmpty) {
+          return id;
+        }
+      }
+    } catch (_) {}
+
+    // CASE 2: Plain numeric device id
+    if (RegExp(r'^\d+$').hasMatch(value)) {
+      return value;
+    }
+
+    // ❌ Invalid QR
+    return null;
+  }
+
   void _toggleTorch() async {
     await _controller.toggleTorch();
     HapticFeedback.selectionClick();
@@ -144,7 +171,20 @@ class _QrScanScreenState extends State<QrScanScreen>
 
       setState(() => _galleryLoading = false);
 
-      _goNext(equipmentType: equipmentType, deviceId: raw.trim());
+      final deviceId = _extractDeviceId(raw);
+
+      if (deviceId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Invalid QR code ❌")),
+        );
+        return;
+      }
+
+      _goNext(
+        equipmentType: equipmentType,
+        deviceId: deviceId,
+      );
+
     } catch (e) {
       if (!mounted) return;
       setState(() => _galleryLoading = false);
@@ -216,9 +256,18 @@ class _QrScanScreenState extends State<QrScanScreen>
                 final rawValue = barcodes.first.rawValue;
                 if (rawValue == null || rawValue.isEmpty) return;
 
+                final deviceId = _extractDeviceId(rawValue);
+
+                if (deviceId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Invalid QR code ❌")),
+                  );
+                  return;
+                }
+
                 _goNext(
                   equipmentType: equipmentType,
-                  deviceId: rawValue,
+                  deviceId: deviceId,
                 );
               },
             ),

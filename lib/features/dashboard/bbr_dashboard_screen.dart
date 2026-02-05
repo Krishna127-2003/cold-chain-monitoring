@@ -1,16 +1,26 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: unnecessary_type_check
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/api/android_data_api.dart';
+import '../../data/session/session_manager.dart';
 import 'widgets/status_row.dart';
 import 'widgets/dashboard_top_bar.dart';
+import 'models/device_status.dart';
+import 'utils/device_status_mapper.dart';
+import '../notifications/alert_engine.dart';
+import '../notifications/alert_settings.dart';
+import '../notifications/alert_settings_storage.dart';
+import '../notifications/notification_service.dart';
 
 class BbrDashboardScreen extends StatefulWidget {
   final String deviceId;
 
-  const BbrDashboardScreen({super.key, required this.deviceId});
+  const BbrDashboardScreen({
+    super.key,
+    required this.deviceId,
+  });
 
   @override
   State<BbrDashboardScreen> createState() => _BbrDashboardScreenState();
@@ -18,171 +28,128 @@ class BbrDashboardScreen extends StatefulWidget {
 
 class _BbrDashboardScreenState extends State<BbrDashboardScreen> {
   Timer? _timer;
+  DeviceStatus? _status;
   bool _loading = false;
+  DateTime? _lastSync;
+  final AlertEngine _alertEngine = AlertEngine();
+  AlertSettings? _settings;
 
-  Map<String, dynamic> _data = {};
 
-  String _formatValue(String key, dynamic value) {
-    if (value == null) return "--";
-    final s = value.toString().trim();
-    if (s.isEmpty) return "--";
-
-    if (key.toLowerCase() == "pv" || key.toLowerCase() == "sv") {
-      if (s.contains("°")) return s;
-      return "$s°C";
-    }
-
-    if (key.toLowerCase() == "battery") {
-      return s.contains("%") ? s : "$s%";
-    }
-
-    if (key.toLowerCase() == "timestamp") return s;
-
-    if (s == "1") {
-      if (key.toLowerCase() == "door") return "OPEN";
-      return "ON";
-    }
-    if (s == "0") {
-      if (key.toLowerCase() == "door") return "CLOSED";
-      return "OFF";
-    }
-
-    return s;
+  bool isStale() {
+    if (_lastSync == null) return true;
+    return DateTime.now().difference(_lastSync!).inMinutes > 5;
   }
 
-  String _prettyLabel(String key) {
-    final k = key.toLowerCase();
-    switch (k) {
-      case "pv":
-        return "PV";
-      case "sv":
-        return "SV";
-      case "compressor":
-        return "Compressor";
-      case "heater":
-        return "Heater";
-      case "probe":
-        return "Probe";
-      case "door":
-        return "Door";
-      case "battery":
-        return "Battery";
-      case "power":
-        return "Power";
-      case "timestamp":
-        return "Timestamp";
-      default:
-        return key
-            .replaceAll("_", " ")
-            .replaceAllMapped(
-              RegExp(r'([a-z])([A-Z])'),
-              (m) => "${m[1]} ${m[2]}",
-            )
-            .toUpperCase();
-    }
-  }
+  String _timeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
 
-  IconData _iconForKey(String key) {
-    final k = key.toLowerCase();
-    switch (k) {
-      case "compressor":
-        return Icons.settings;
-      case "heater":
-        return Icons.local_fire_department_outlined;
-      case "probe":
-        return Icons.thermostat;
-      case "door":
-        return Icons.door_front_door_outlined;
-      case "battery":
-        return Icons.battery_full;
-      case "power":
-        return Icons.power_settings_new;
-      case "pv":
-      case "sv":
-        return Icons.device_thermostat;
-      case "timestamp":
-        return Icons.schedule;
-      default:
-        return Icons.info_outline;
-    }
-  }
-
-  bool _isGood(String key, String v) {
-    final k = key.toLowerCase();
-    if (k == "door") return v.toUpperCase() == "CLOSED";
-    if (v.toUpperCase() == "ON") return true;
-    if (v.toUpperCase() == "OFF") return false;
-    return true;
+    if (diff.inSeconds < 10) return "a few seconds ago";
+    if (diff.inSeconds < 60) return "${diff.inSeconds} sec ago";
+    if (diff.inMinutes < 60) return "${diff.inMinutes} min ago";
+    if (diff.inHours < 24) return "${diff.inHours} hrs ago";
+    return "${diff.inDays} days ago";
   }
 
   Future<void> _fetch() async {
     if (_loading) return;
+
     setState(() => _loading = true);
 
-    final data = await AndroidDataApi.fetchLatest();
+    final telemetry =
+        await AndroidDataApi.fetchByDeviceId(widget.deviceId);
 
     if (!mounted) return;
 
-    if (data == null) {
-      setState(() => _loading = false);
-      return;
-    }
+    final lastSync =
+        await SessionManager.getLastSync(widget.deviceId);
 
     setState(() {
-      _data = Map<String, dynamic>.from(data);
+      _status = telemetry == null
+          ? null
+          : DeviceStatusMapper.fromApi(telemetry);
+      _lastSync = lastSync;
       _loading = false;
     });
+
+    if (_settings != null && _status?.pv != null && _status?.sv != null) {
+      final shouldAlert = _alertEngine.shouldTrigger(
+        pv: _status!.pv!,
+        sv: _status!.sv!,
+        settings: _settings!,
+      );
+
+      if (shouldAlert) {
+        await NotificationService.send(
+          "Cold Chain Alert",
+          "Temperature is abnormal for extended time",
+        );
+      }
+    }
   }
 
-  List<Widget> _buildDynamicRows() {
-    if (_data.isEmpty) {
-      return const [
-        StatusRow(
-          icon: Icons.info_outline,
-          label: "No data",
-          value: "--",
-          isGood: true,
-        ),
-      ];
+
+
+  // ======================
+  // 🚨 SMART ALARM LOGIC
+  // ======================
+
+  String alarmText(DeviceStatus s) {
+    if (s.batteryPercent < 20) {
+      return "LOW BATTERY";
     }
 
-    final shown = <String>{};
-    final rows = <Widget>[];
+    if (s.pv != null && s.sv != null && s.pv! > s.sv! + 2) {
+      return "HIGH TEMP";
+    }
 
-    _data.forEach((key, value) {
-      final normalizedKey = key.toLowerCase().trim();
-      if (shown.contains(normalizedKey)) return;
-      shown.add(normalizedKey);
+    if (s.pv != null && s.sv != null && s.pv! < s.sv! - 2) {
+      return "LOW TEMP";
+    }
 
-      // PV/SV already shown in big section if present
-      if (normalizedKey == "pv" || normalizedKey == "sv") return;
+    if (s.alarmActive) {
+      return "ACTIVE";
+    }
 
-      final formatted = _formatValue(key, value);
+    return "NORMAL";
+  }
 
-      rows.add(
-        StatusRow(
-          icon: _iconForKey(key),
-          label: _prettyLabel(key),
-          value: formatted,
-          isGood: _isGood(key, formatted),
-        ),
+  Color alarmColor(DeviceStatus s) {
+    switch (alarmText(s)) {
+      case "HIGH TEMP":
+        return Colors.redAccent;
+      case "LOW TEMP":
+        return Colors.lightBlueAccent;
+      case "LOW BATTERY":
+        return Colors.orangeAccent;
+      case "ACTIVE":
+        return Colors.redAccent;
+      default:
+        return Colors.greenAccent;
+    }
+  }
+
+  Future<void> _loadAlertSettings() async {
+    final data = await AlertSettingsStorage.load();
+
+    setState(() {
+      _settings = AlertSettings(
+        app: data["app"],
+        email: data["email"],
+        sms: data["sms"],
+        level: data["level"],
       );
     });
-
-    return rows;
   }
 
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _fetch();
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      await _fetch();
-    });
+    _loadAlertSettings();
+    _fetch();
+    _timer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _fetch(),
+    );
   }
 
   @override
@@ -193,123 +160,159 @@ class _BbrDashboardScreenState extends State<BbrDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pv = _formatValue("pv", _data["pv"]);
-    final sv = _formatValue("sv", _data["sv"]);
-    final power = _formatValue("power", _data["power"]);
-    final battery = _formatValue("battery", _data["battery"]);
+    final s = _status;
+
+    String compressorText() {
+      if (s == null) return "--";
+      if (!s.compressorOn) return "OFF";
+      if (s.highAmp) return "ON   0.0A  HIGH (A)";
+      if (s.lowAmp) return "ON   0.0A  LOW (A)";
+      return "ON   0.0A";
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
-        powerText: "Power: $power",
-        batteryText: battery,
+        deviceId: widget.deviceId,
+        powerText:
+            s == null ? "Power: --" : "Power: ${s.powerOn ? "ON" : "OFF"}",
+        batteryText: s == null ? "0%" : "${s.batteryPercent}%",
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          children: [
+            const SizedBox(height: 18),
 
-          final maxContentWidth = w > 600 ? 520.0 : w;
-          double titleSize = w < 360 ? 20 : (w < 450 ? 24 : 26);
-          double pvSize = w < 360 ? 52 : (w < 450 ? 62 : 70);
-          double svSize = w < 360 ? 28 : (w < 450 ? 32 : 36);
+            const Text(
+              "BLOOD BAG REFRIGERATOR",
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF60A5FA),
+                letterSpacing: 2,
+              ),
+              textAlign: TextAlign.center,
+            ),
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxContentWidth),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 18),
+            const SizedBox(height: 20),
 
-                    Text(
-                      "BLOOD BAG REFRIGERATOR",
-                      style: TextStyle(
-                        fontSize: titleSize,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF60A5FA),
-                        letterSpacing: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    if (_loading)
-                      Text(
-                        "Fetching latest data...",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-
-                    const SizedBox(height: 14),
-
-                    if (_data.containsKey("pv")) ...[
-                      const Text(
-                        "PV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          pv,
-                          style: TextStyle(
-                            fontSize: pvSize,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF22C55E),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    if (_data.containsKey("sv")) ...[
-                      const Text(
-                        "SV",
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        sv,
-                        style: TextStyle(
-                          fontSize: svSize,
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF38BDF8),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-                    Divider(color: Colors.white.withOpacity(0.12), height: 1),
-                    const SizedBox(height: 10),
-
-                    Column(
-                      children: _buildDynamicRows(),
-                    ),
-
-                    const SizedBox(height: 26),
-                    Text(
-                      "Device ID: ${widget.deviceId}",
-                      style: const TextStyle(color: Colors.white38),
-                    ),
-                    const SizedBox(height: 22),
-                  ],
+            if (s?.pv != null) ...[
+              const Text("PV",
+                  style: TextStyle(color: Colors.white70, fontSize: 18)),
+              const SizedBox(height: 6),
+              Text(
+                "${s!.pv!.toStringAsFixed(1)}°C",
+                style: const TextStyle(
+                  fontSize: 64,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF22C55E),
                 ),
               ),
+            ],
+
+            const SizedBox(height: 10),
+
+            if (s?.sv != null)
+              Text(
+                "SV  ${s!.sv!.toStringAsFixed(1)}°C",
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF38BDF8),
+                ),
+              ),
+
+            const SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_loading) ...[
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text("Currently syncing..."),
+                ] else ...[
+                  const Icon(Icons.sync, size: 14, color: Colors.white54),
+                  const SizedBox(width: 6),
+                  Text(
+                    _lastSync == null
+                        ? "Last sync: Never"
+                        : "Last sync: ${_timeAgo(_lastSync!)}",
+                    style: TextStyle(
+                      color:
+                          isStale() ? Colors.orangeAccent : Colors.white54,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
             ),
-          );
-        },
+
+            const SizedBox(height: 22),
+            Divider(color: Colors.white.withValues(alpha: 0.12)),
+            const SizedBox(height: 10),
+
+            StatusRow(
+              icon: Icons.memory,
+              label: "System",
+              value:
+                  s == null ? "--" : (s.systemOk ? "HEALTHY" : "FAILURE"),
+              isGood: s?.systemOk ?? true,
+            ),
+
+            StatusRow(
+              icon: Icons.settings,
+              label: "Compressor",
+              value: compressorText(),
+              isGood: s?.compressorOn ?? false,
+            ),
+
+            StatusRow(
+              icon: Icons.power_settings_new,
+              label: "Power",
+              value: s?.powerOn == true ? "ON" : "OFF",
+              isGood: s?.powerOn ?? false,
+            ),
+
+            StatusRow(
+              icon: Icons.thermostat,
+              label: "Probe",
+              value: s?.probeOk == true ? "OK" : "FAIL",
+              isGood: s?.probeOk ?? false,
+            ),
+
+            // 🚨 SMART ALARM
+            StatusRow(
+              icon: Icons.notifications_active,
+              label: "Alarm",
+              value: s == null ? "--" : alarmText(s),
+              valueColor:
+                  s == null ? Colors.white54 : alarmColor(s),
+              isGood: s != null && alarmText(s) == "NORMAL",
+            ),
+
+            StatusRow(
+              icon: Icons.door_front_door,
+              label: "Door",
+              value: s?.doorClosed == true ? "CLOSED" : "OPEN",
+              isGood: s?.doorClosed ?? true,
+            ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              "Device ID: ${widget.deviceId}",
+              style: const TextStyle(color: Colors.white38),
+            ),
+
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
     );
   }

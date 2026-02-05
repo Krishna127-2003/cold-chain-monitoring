@@ -7,6 +7,27 @@ class SessionManager {
   static const _keyLoginType = "login_type";
   static const _keyEmail = "email";
 
+  static const String _lastSyncPrefix = "last_sync_";
+
+  static Future<void> saveLastSync(
+    String deviceId,
+    DateTime time,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      "$_lastSyncPrefix$deviceId",
+      time.toIso8601String(),
+    );
+  }
+
+  static Future<DateTime?> getLastSync(String deviceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString("$_lastSyncPrefix$deviceId");
+    if (value == null) return null;
+    return DateTime.tryParse(value);
+  }
+
+
   /// ✅ Save login session
   static Future<void> saveLogin({
     required String loginType,

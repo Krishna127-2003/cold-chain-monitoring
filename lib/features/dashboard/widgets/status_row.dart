@@ -6,7 +6,12 @@ class StatusRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+
+  /// ✅ default good/bad logic (still supported)
   final bool isGood;
+
+  /// 🎨 optional custom color (for alarms, warnings, temp etc)
+  final Color? valueColor;
 
   const StatusRow({
     super.key,
@@ -14,20 +19,24 @@ class StatusRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.isGood,
+    this.valueColor, // 👈 new (optional)
   });
 
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
 
-    // ✅ responsive sizing
+    // 📱 responsive sizing
     final iconBox = w < 360 ? 34.0 : 38.0;
     final fontSize = w < 360 ? 15.5 : 18.0;
     final verticalPad = w < 360 ? 10.0 : 14.0;
     final gap = w < 360 ? 10.0 : 14.0;
 
-    final valueColor =
-        isGood ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+    // 🎯 final color resolution
+    final resolvedColor = valueColor ??
+        (isGood
+            ? const Color(0xFF22C55E) // green
+            : const Color(0xFFEF4444)); // red
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: verticalPad),
@@ -46,9 +55,10 @@ class StatusRow extends StatelessWidget {
               size: w < 360 ? 18 : 20,
             ),
           ),
+
           SizedBox(width: gap),
 
-          // ✅ label side
+          // 🏷 label
           Expanded(
             child: Text(
               "$label:",
@@ -64,14 +74,14 @@ class StatusRow extends StatelessWidget {
 
           const SizedBox(width: 10),
 
-          // ✅ value side (never overflow)
+          // 📊 value (auto shrink if long like "LOW BATTERY")
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               style: TextStyle(
                 fontSize: fontSize,
-                color: valueColor,
+                color: resolvedColor,
                 fontWeight: FontWeight.w900,
               ),
             ),

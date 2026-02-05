@@ -18,6 +18,7 @@ class AllDevicesScreen extends StatefulWidget {
 
   @override
   State<AllDevicesScreen> createState() => _AllDevicesScreenState();
+  
 }
 
 class _AllDevicesScreenState extends State<AllDevicesScreen> {
@@ -72,19 +73,31 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     super.initState();
 
     _loadDevices(); // 👈 ADD THIS
-    _loadTemps();
 
     // ✅ refresh every 60 seconds when saved devices screen is open
-    _tempTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      _loadTemps();
+    _tempTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (!mounted || _devices.isEmpty) return;
+      await _loadTemps();
     });
   }
 
   @override
   void dispose() {
-    _hideSnackBar(); // ✅ final cleanup
     _tempTimer?.cancel();
     super.dispose();
+  }
+
+  Map<String, dynamic>? _getDeviceData(String deviceId) {
+    if (_latestData.isEmpty) return null;
+
+    final apiDeviceId =
+        (_latestData["device_id"] ?? "").toString();
+
+    if (apiDeviceId == deviceId) {
+      return _latestData;
+    }
+
+    return null;
   }
 
   Future<void> _loadDevices() async {
@@ -93,18 +106,20 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     final loginType = await SessionManager.getLoginType();
     final email = await SessionManager.getEmail();
 
-    final result = await _deviceRepo.getRegisteredDevices(
+    final devices = await _deviceRepo.getRegisteredDevices(
       email: email ?? "",
       loginType: loginType ?? "guest",
     );
 
-
     if (!mounted) return;
 
     setState(() {
-      _devices = result;
+      _devices = devices;
       _loadingDevices = false;
     });
+
+    // ✅ IMPORTANT: load temps ONLY AFTER devices are ready
+    await _loadTemps();
   }
 
   void _hideSnackBar() {
@@ -112,12 +127,36 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     messenger?.removeCurrentSnackBar(); // instant kill
   }
 
-
-
   Future<void> _loadTemps() async {
+    if (!mounted) return;
+
+    // ✅ SAFETY: devices not loaded yet
+    if (_devices.isEmpty) {
+      debugPrint("⏸ Skipping temp load: no devices yet");
+      return;
+    }
+
     setState(() => _loadingTemps = true);
 
-    final data = await AndroidDataApi.fetchLatest();
+    // ✅ TEMP: only fetch known working device
+    final workingDevice = _devices.firstWhere(
+      (d) => d.deviceId == "5191",
+      orElse: () => _devices.first,
+    );
+
+    final rawId = workingDevice.deviceId;
+
+    // ✅ extract numeric deviceId if URL was stored
+    final deviceId = rawId.contains("device_id=")
+        ? Uri.parse(rawId).queryParameters["device_id"]
+        : rawId;
+
+    if (deviceId == null) {
+      debugPrint("❌ Invalid deviceId: $rawId");
+      return;
+    }
+
+    final data = await AndroidDataApi.fetchByDeviceId(deviceId);
 
     if (!mounted) return;
 
@@ -127,67 +166,24 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     });
   }
 
+
   String _getSystemStatusForDevice(String deviceId) {
-    Map<String, dynamic>? d;
+    final d = _getDeviceData(deviceId);
+    if (d == null) return "--";
 
-    // CASE 1: API returns list
-    if (_latestData["devices"] is List) {
-      for (final item in _latestData["devices"]) {
-        if (item is Map) {
-          final id = (item["deviceId"] ?? item["id"] ?? "").toString();
-          if (id == deviceId) {
-            d = Map<String, dynamic>.from(item);
-            break;
-          }
-        }
-      }
-    }
+    final error = d["Error"] ?? d["error"] ?? "0";
 
-    // CASE 2: API returns map keyed by deviceId
-    if (d == null && _latestData[deviceId] is Map) {
-      d = Map<String, dynamic>.from(_latestData[deviceId]);
-    }
-
-    if (d == null) return "UNKNOWN";
-
-    // 🔴 System error bit = mixbit12
-    final systemErr = d["mixbit12"]?.toString() == "1";
-
-    return systemErr ? "FAILURE" : "HEALTHY";
+    return error.toString() == "0" ? "HEALTHY" : "FAILURE";
   }
 
+  String? _getTempForDevice(String deviceId) {
+    final d = _getDeviceData(deviceId);
+    if (d == null) return null;
 
- String? _getTempForDevice(String deviceId) {
-    Map<String, dynamic>? deviceData;
-
-    // CASE 1: API returns list of devices
-    if (_latestData["devices"] is List) {
-      for (final item in _latestData["devices"]) {
-        if (item is Map) {
-          final id = (item["deviceId"] ?? item["id"] ?? "").toString();
-          if (id == deviceId) {
-            deviceData = Map<String, dynamic>.from(item);
-            break;
-          }
-        }
-      }
-    }
-
-    // CASE 2: API returns flat map for single device
-    if (deviceData == null && _latestData.isNotEmpty) {
-      deviceData = _latestData;
-    }
-
-    if (deviceData == null) return null;
-
-    // 🔥 PRIORITY LOGIC
-    final temp = deviceData["temp"] ?? deviceData["temperature"];
-    if (temp != null) return temp.toString();
-
-    final pv = deviceData["pv"];
-    if (pv != null) return pv.toString();
-
-    return null;
+    // Dynamic priority:
+    // temp → pv → sv
+    final temp = d["temp"] ?? d["pv"] ?? d["sv"];
+    return temp?.toString();
   }
 
 
@@ -388,7 +384,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                   final dept = "-";              // placeholder
                   final equipmentType = d.serviceType;
                   final status = _getSystemStatusForDevice(deviceId);
-
+                  debugPrint("SavedDevices device=$deviceId data=${_getDeviceData(deviceId)}");
 
                   final selected = _selected.contains(deviceId);
 
@@ -574,10 +570,15 @@ class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.status});
 
   Color _color(String s) {
-    if (s.toUpperCase().contains("FAIL")) return Colors.red;
-    if (s.toUpperCase().contains("ALARM")) return Colors.orange;
+    final v = s.toUpperCase();
+
+    if (v == "--") return Colors.grey;
+    if (v.contains("FAIL")) return Colors.red;
+    if (v.contains("UNKNOWN")) return Colors.grey;
+
     return Colors.green;
   }
+
 
   @override
   Widget build(BuildContext context) {

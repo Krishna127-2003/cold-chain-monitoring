@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../routes/app_routes.dart';
+import '../../download/download_pdf_screen.dart';
 
 class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final bool showTitle;
+  final String? deviceId;
 
   /// ✅ dynamic top-right values
   final String powerText;
@@ -16,6 +18,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.showTitle = false,
     this.powerText = "Power: --",
     this.batteryText = "--%",
+    this.deviceId,
   });
 
   @override
@@ -154,6 +157,15 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
                       AppRoutes.services,
                       (route) => false,
                     );
+                  } else if (value == "download_pdf" && deviceId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DownloadPdfScreen(
+                          deviceId: deviceId!,
+                        ),
+                      ),
+                    );
                   }
                 },
                 itemBuilder: (_) => const [
@@ -164,6 +176,10 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
                   PopupMenuItem(
                     value: "add_new_device",
                     child: Text("Add New Device"),
+                  ),
+                  PopupMenuItem(
+                    value: "download_pdf",
+                    child: Text("Download Data Log"),
                   ),
                 ],
               ),

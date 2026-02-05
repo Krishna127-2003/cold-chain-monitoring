@@ -13,3 +13,4 @@ abstract class DeviceRepository {
   /// 🔥 Splash ONLY uses this
   Future<bool> hasAnyDevice();
 }
+

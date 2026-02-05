@@ -1,35 +1,44 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import '../../features/dashboard/utils/telemetry_parser.dart';
+import '../session/session_manager.dart'; // ✅ ADD THIS
 
 class AndroidDataApi {
   static const String _baseUrl =
-      "https://datapanel-40-h0gec0bvh4g7fage.canadacentral-01.azurewebsites.net/api/GetAndroidData";
-  //// "https://{BBR}{QRCODE}-{UserEnteredKey}}.canadacentral-01.azurewebsites.net/api/GetAndroidData";
-  static Future<Map<String, dynamic>?> fetchLatest() async {
-    try {
-      final res = await http
-          .get(Uri.parse(_baseUrl))
-          .timeout(const Duration(seconds: 10));
+      "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/GetAndroidData";
 
-      if (res.statusCode != 200) {
+  /// ✅ Fetch PARSED telemetry for ONE device
+  static Future<Map<String, dynamic>?> fetchByDeviceId(String deviceId) async {
+    final url = Uri.parse("$_baseUrl?device_id=$deviceId");
+
+    debugPrint("📡 API CALL → $url");
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode != 200) {
+        debugPrint("❌ API ERROR ${response.statusCode}");
         return null;
       }
 
-      final decoded = jsonDecode(res.body);
+      final raw = jsonDecode(response.body);
 
-      // ✅ If API returns direct object map
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
+      // 🔥 IMPORTANT PART
+      final parsed = TelemetryParser.parse(raw);
 
-      // ✅ If API returns list (take first record)
-      if (decoded is List && decoded.isNotEmpty && decoded.first is Map) {
-        return Map<String, dynamic>.from(decoded.first);
-      }
+      // ✅ SAVE LAST SYNC TIME HERE (VERY IMPORTANT)
+      await SessionManager.saveLastSync(
+        deviceId,
+        DateTime.now().toUtc(),
+      );
 
-      return null;
+      debugPrint("✅ FLAT TELEMETRY → $parsed");
+
+      return parsed; // ✅ NOT raw anymore
     } catch (e) {
-      // ✅ Prevent crash always
+      debugPrint("❌ API EXCEPTION $e");
       return null;
     }
   }

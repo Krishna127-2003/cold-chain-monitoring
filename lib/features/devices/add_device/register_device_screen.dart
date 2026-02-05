@@ -7,7 +7,7 @@ import '../../../data/models/registered_device.dart';
 import '../../../data/repository/device_repository.dart';
 import '../../../data/repository_impl/local_device_repository.dart';
 import '../../../data/session/session_manager.dart';
-import '../../../data/api/device_registration_api.dart';
+import '../../../data/api/user_info_api.dart';
 
 class RegisterDeviceScreen extends StatefulWidget {
   const RegisterDeviceScreen({super.key});
@@ -147,16 +147,17 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                         await _deviceRepo.registerDevice(device);
 
                         /// 2️⃣ SEND REGISTRATION CALLBACK TO AZURE
-                        await DeviceRegistrationApi.registerDevice(
-                          email: email,
-                          loginType: loginType,
-                          deviceId: deviceId,
-                          qrCode: deviceId,
-                          productKey: productKey,
-                          serviceType: equipmentType,
-                          registeredAt: now,
-                        );
-
+                        await UserInfoApi.postData({
+                          "type": "device_registration",
+                          "email": email,
+                          "loginType": loginType,
+                          "deviceId": deviceId,
+                          "qrCode": deviceId,
+                          "productKey": productKey,
+                          "serviceType": equipmentType,
+                          "registeredAt": now.toIso8601String(),
+                        });
+                        
                         setState(() => _loading = false);
 
                         /// 3️⃣ GO TO SAVED DEVICES

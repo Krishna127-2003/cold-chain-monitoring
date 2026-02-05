@@ -4,14 +4,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/api/android_data_api.dart';
+import '../../data/session/session_manager.dart';
+import '../notifications/notification_service.dart';
 import 'widgets/status_row.dart';
 import 'widgets/dashboard_top_bar.dart';
 import 'models/device_status.dart';
 import 'utils/device_status_mapper.dart';
+import '../notifications/alert_engine.dart';
+import '../notifications/alert_settings.dart';
+import '../notifications/alert_settings_storage.dart';
 
 class DeepFreezerDashboardScreen extends StatefulWidget {
   final String deviceId;
-  const DeepFreezerDashboardScreen({super.key, required this.deviceId});
+
+  const DeepFreezerDashboardScreen({
+    super.key,
+    required this.deviceId,
+  });
 
   @override
   State<DeepFreezerDashboardScreen> createState() =>
@@ -23,41 +32,111 @@ class _DeepFreezerDashboardScreenState
   Timer? _timer;
   DeviceStatus? _status;
   bool _loading = false;
+  DateTime? _lastSync;
+  final AlertEngine _alertEngine = AlertEngine();
+  AlertSettings? _settings;
+
+
+  bool isStale() {
+    if (_lastSync == null) return true;
+    return DateTime.now().difference(_lastSync!).inMinutes > 5;
+  }
+
+  String _timeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+
+    if (diff.inSeconds < 10) return "a few seconds ago";
+    if (diff.inSeconds < 60) return "${diff.inSeconds} sec ago";
+    if (diff.inMinutes < 60) return "${diff.inMinutes} min ago";
+    if (diff.inHours < 24) return "${diff.inHours} hrs ago";
+    return "${diff.inDays} days ago";
+  }
 
   Future<void> _fetch() async {
     if (_loading) return;
+
     setState(() => _loading = true);
 
-    final raw = await AndroidDataApi.fetchLatest();
+    final telemetry =
+        await AndroidDataApi.fetchByDeviceId(widget.deviceId);
+
     if (!mounted) return;
 
-    Map<String, dynamic>? deviceData;
-    if (raw != null) {
-      // CASE 1: API returns map keyed by deviceId
-      if (raw[widget.deviceId] is Map) {
-        deviceData = Map<String, dynamic>.from(raw[widget.deviceId]);
-      }
-      // CASE 2: API returns list of devices
-      else if (raw["devices"] is List) {
-        for (final item in raw["devices"]) {
-          if (item is Map) {
-            final id = (item["deviceId"] ?? item["id"] ?? "").toString();
-            if (id == widget.deviceId) {
-              deviceData = Map<String, dynamic>.from(item);
-              break;
-            }
-          }
-        }
-      }
-      // CASE 3: API returns direct device data (fallback)
-      else if (raw is Map && raw.containsKey("mixbit12")) {
-        deviceData = raw;
-      }
-    }
+    final lastSync =
+        await SessionManager.getLastSync(widget.deviceId);
 
     setState(() {
-      _status = deviceData == null ? null : DeviceStatusMapper.fromApi(deviceData);
+      _status = telemetry == null
+          ? null
+          : DeviceStatusMapper.fromApi(telemetry);
+      _lastSync = lastSync;
       _loading = false;
+    });
+
+    if (_settings != null && _status?.pv != null && _status?.sv != null) {
+      final shouldAlert = _alertEngine.shouldTrigger(
+        pv: _status!.pv!,
+        sv: _status!.sv!,
+        settings: _settings!,
+      );
+
+      if (shouldAlert) {
+        await NotificationService.send(
+          "Cold Chain Alert",
+          "Temperature is abnormal for extended time",
+        );
+      }
+    }
+  }
+
+  // =======================
+  // 🚨 SMART ALARM LOGIC
+  // =======================
+
+  String alarmText(DeviceStatus s) {
+    if (s.batteryPercent < 20) {
+      return "LOW BATTERY";
+    }
+
+    if (s.pv != null && s.sv != null && s.pv! > s.sv! + 2) {
+      return "HIGH TEMP";
+    }
+
+    if (s.pv != null && s.sv != null && s.pv! < s.sv! - 2) {
+      return "LOW TEMP";
+    }
+
+    if (s.alarmActive) {
+      return "ACTIVE";
+    }
+
+    return "OFF";
+  }
+
+  Color alarmColor(DeviceStatus s) {
+    switch (alarmText(s)) {
+      case "HIGH TEMP":
+      case "ACTIVE":
+        return Colors.redAccent;
+      case "LOW BATTERY":
+        return Colors.orangeAccent;
+      case "LOW TEMP":
+        return Colors.lightBlueAccent;
+      default:
+        return Colors.greenAccent;
+    }
+  }
+
+  Future<void> _loadAlertSettings() async {
+    final data = await AlertSettingsStorage.load();
+
+    setState(() {
+      _settings = AlertSettings(
+        app: data["app"],
+        email: data["email"],
+        sms: data["sms"],
+        level: data["level"],
+      );
     });
   }
 
@@ -65,7 +144,11 @@ class _DeepFreezerDashboardScreenState
   void initState() {
     super.initState();
     _fetch();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _fetch());
+    _loadAlertSettings();
+    _timer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _fetch(),
+    );
   }
 
   @override
@@ -79,23 +162,21 @@ class _DeepFreezerDashboardScreenState
     final s = _status;
 
     String compressorText() {
-      if (s == null || !s.compressorOn) return "OFF";
-      if (s.lowAmp) return "ON   0.0A  LOW AMP";
-      if (s.highAmp) return "ON   0.0A  HIGH AMP";
+      if (s == null) return "--";
+      if (!s.compressorOn) return "OFF";
+      if (s.highAmp) return "ON   0.0A  HIGH (A)";
+      if (s.lowAmp) return "ON   0.0A  LOW (A)";
       return "ON   0.0A";
     }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
-        powerText: s == null
-            ? "Power: --"
-            : "Power: ${s.powerOn ? "ON" : "OFF"}",
-        batteryText: s == null
-            ? "0%"
-            : "${s.batteryPercent}%",
+        deviceId: widget.deviceId,
+        powerText:
+            s == null ? "Power: --" : "Power: ${s.powerOn ? "ON" : "OFF"}",
+        batteryText: s == null ? "0%" : "${s.batteryPercent}%",
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Column(
@@ -140,21 +221,48 @@ class _DeepFreezerDashboardScreenState
                 ),
               ),
 
+            const SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_loading) ...[
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text("Currently syncing..."),
+                ] else ...[
+                  const Icon(Icons.sync, size: 14, color: Colors.white54),
+                  const SizedBox(width: 6),
+                  Text(
+                    _lastSync == null
+                        ? "Last sync: Never"
+                        : "Last sync: ${_timeAgo(_lastSync!)}",
+                    style: TextStyle(
+                      color:
+                          isStale() ? Colors.orangeAccent : Colors.white54,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
             const SizedBox(height: 22),
             Divider(color: Colors.white.withValues(alpha: 0.12)),
             const SizedBox(height: 10),
 
-            /// 1️⃣ SYSTEM
             StatusRow(
               icon: Icons.memory,
               label: "System",
-              value: s == null
-                  ? "--"
-                  : (s.systemOk ? "HEALTHY" : "FAILURE"),
+              value:
+                  s == null ? "--" : (s.systemOk ? "HEALTHY" : "FAILURE"),
               isGood: s?.systemOk ?? true,
             ),
 
-            /// 2️⃣ COMPRESSOR
             StatusRow(
               icon: Icons.settings,
               label: "Compressor",
@@ -162,7 +270,6 @@ class _DeepFreezerDashboardScreenState
               isGood: s?.compressorOn ?? false,
             ),
 
-            /// 3️⃣ POWER
             StatusRow(
               icon: Icons.power_settings_new,
               label: "Power",
@@ -170,7 +277,6 @@ class _DeepFreezerDashboardScreenState
               isGood: s?.powerOn ?? false,
             ),
 
-            /// 4️⃣ PROBE
             StatusRow(
               icon: Icons.thermostat,
               label: "Probe",
@@ -178,19 +284,15 @@ class _DeepFreezerDashboardScreenState
               isGood: s?.probeOk ?? false,
             ),
 
-            /// 5️⃣ ALARM
             StatusRow(
               icon: Icons.notifications_active,
               label: "Alarm",
-              value: s == null
-                  ? "--"
-                  : s.alarmActive
-                      ? (s.alarmMuted ? "MUTE" : "ACTIVE")
-                      : "OFF",
-              isGood: !(s?.alarmActive ?? false),
+              value: s == null ? "--" : alarmText(s),
+              valueColor:
+                  s == null ? Colors.white54 : alarmColor(s),
+              isGood: s != null && alarmText(s) == "OFF",
             ),
 
-            /// 6️⃣ DOOR
             StatusRow(
               icon: Icons.door_front_door,
               label: "Door",
@@ -198,17 +300,8 @@ class _DeepFreezerDashboardScreenState
               isGood: s?.doorClosed ?? true,
             ),
 
-            /// 7️⃣ UPDATED
-            StatusRow(
-              icon: Icons.schedule,
-              label: "Updated",
-              value: s?.updatedAt?.toIso8601String() ?? "--",
-              isGood: true,
-            ),
-
             const SizedBox(height: 20),
 
-            /// 8️⃣ DEVICE ID
             Text(
               "Device ID: ${widget.deviceId}",
               style: const TextStyle(color: Colors.white38),

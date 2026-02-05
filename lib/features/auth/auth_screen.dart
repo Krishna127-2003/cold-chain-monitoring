@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/utils/responsive.dart';
 import '../../core/theme/theme_provider.dart';
@@ -14,14 +15,18 @@ import '../../data/session/session_manager.dart'; // ✅ NEW
 import '../../data/sync/device_sync_service.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
-
+import '../../data/api/user_info_api.dart';
+import 'privacy_policy_screen.dart';
 
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
+  static const String policyVersion = "2026-02-04";
+
   @override
   State<AuthScreen> createState() => _AuthScreenState();
+  
 }
 
 class _AuthScreenState extends State<AuthScreen>
@@ -35,6 +40,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   bool _loadingGoogle = false;
   bool _loadingGuest = false;
+  bool acceptedPolicy = false;
+
 
   @override
   void initState() {
@@ -55,6 +62,8 @@ class _AuthScreenState extends State<AuthScreen>
     );
 
     _controller.forward();
+    _loadPolicyAcceptance();
+
   }
 
   @override
@@ -63,12 +72,28 @@ class _AuthScreenState extends State<AuthScreen>
     super.dispose();
   }
 
+  Future<void> _loadPolicyAcceptance() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedVersion = prefs.getString("accepted_policy_version");
+
+    if (savedVersion == AuthScreen.policyVersion) {
+      setState(() => acceptedPolicy = true);
+    }
+  }
+
   Future<void> _goNext() async {
     Navigator.pushReplacementNamed(context, AppRoutes.services);
   }
 
 
   Future<void> _onGooglePressed() async {
+    if (!acceptedPolicy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please accept Privacy Policy to continue")),
+      );
+      return;
+    }
+
     setState(() => _loadingGoogle = true);
 
     final userCredential = await GoogleAuthService.signInWithGoogle();
@@ -88,19 +113,25 @@ class _AuthScreenState extends State<AuthScreen>
 
     final email = userCredential.user!.email!;
 
-    /// ✅ 1. SAVE SESSION FIRST
+    /// ✅ 1. SEND USER INFO TO AZURE (NEW)
+    await UserInfoApi.sendUserInfo(
+      email: email,
+      loginType: "google",
+    );
+
+    /// ✅ 2. SAVE SESSION LOCALLY
     await SessionManager.saveLogin(
       loginType: "google",
       email: email,
     );
 
-    /// ✅ 2. SYNC BACKEND DEVICES (THIS WAS MISSING)
+    /// ✅ 3. SYNC BACKEND DEVICES (THIS WAS MISSING)
     final backendHasDevices = await DeviceSyncService.syncFromBackend(
       email: email,
       loginType: "google",
     );
 
-    /// ✅ 3. CHECK LOCAL DEVICES AFTER SYNC
+    /// ✅ 4. CHECK LOCAL DEVICES AFTER SYNC
     final localDevices = await _deviceRepo.getRegisteredDevices(
       email: email,
       loginType: "google",
@@ -110,7 +141,7 @@ class _AuthScreenState extends State<AuthScreen>
 
     if (!mounted) return;
 
-    /// ✅ 4. NAVIGATE CORRECTLY
+    /// ✅ 5. NAVIGATE CORRECTLY
     if (backendHasDevices || localDevices.isNotEmpty) {
       Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
     } else {
@@ -120,11 +151,23 @@ class _AuthScreenState extends State<AuthScreen>
 
 
   Future<void> _onGuestPressed() async {
+    if (!acceptedPolicy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please accept Privacy Policy to continue")),
+      );
+      return;
+    }
+
     setState(() => _loadingGuest = true);
 
     await Future.delayed(const Duration(milliseconds: 550));
 
     if (!mounted) return;
+
+    await UserInfoApi.sendUserInfo(
+      email: "guest",
+      loginType: "guest",
+    );
 
      /// ✅ SAVE GUEST SESSION
     await SessionManager.saveLogin(loginType: "guest");
@@ -286,6 +329,7 @@ class _AuthScreenState extends State<AuthScreen>
                                                 : const Color(0xFF0F172A),
                                           ),
                                         ),
+                                        
                                         const SizedBox(height: 6),
 
                                         Text(
@@ -352,40 +396,109 @@ class _AuthScreenState extends State<AuthScreen>
 
                                         const SizedBox(height: 12),
 
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
+                                        Column(
                                           children: [
-                                            GestureDetector(
-                                              onTap: () {},
-                                              child: const Text(
-                                                "Terms",
-                                                style: TextStyle(
-                                                  color: Color(0xFF2563EB),
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 12,
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Checkbox(
+                                                  value: acceptedPolicy,
+                                                  activeColor: const Color(0xFF60A5FA),
+                                                  onChanged: (v) async {
+                                                    final prefs = await SharedPreferences.getInstance();
+
+                                                    setState(() => acceptedPolicy = v ?? false);
+
+                                                    if (v == true) {
+                                                      await prefs.setString(
+                                                        "accepted_policy_version",
+                                                        AuthScreen.policyVersion,
+                                                      );
+                                                    }
+                                                  },
                                                 ),
-                                              ),
+                                                const Text(
+                                                  "I agree to the ",
+                                                  style: TextStyle(color: Colors.white70),
+                                                ),
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => const PrivacyPolicyScreen(),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: const Text(
+                                                    "Privacy Policy",
+                                                    style: TextStyle(
+                                                      color: Color(0xFF60A5FA),
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            const Text(
-                                              "  •  ",
-                                              style: TextStyle(
-                                                color: Color(0xFF94A3B8),
-                                              ),
-                                            ),
+
+                                            const SizedBox(height: 6),
+
                                             GestureDetector(
-                                              onTap: () {},
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => const PrivacyPolicyScreen(),
+                                                  ),
+                                                );
+                                              },
                                               child: const Text(
-                                                "Privacy",
+                                                "Read our Privacy Policy to learn how we protect your data.",
                                                 style: TextStyle(
-                                                  color: Color(0xFF2563EB),
-                                                  fontWeight: FontWeight.w800,
-                                                  fontSize: 12,
+                                                  color: Colors.white70,
+                                                  fontSize: 11.5,
                                                 ),
                                               ),
                                             ),
                                           ],
                                         ),
+
+                                        const SizedBox(height: 8),
+
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => const PrivacyPolicyScreen(),
+                                                  ),
+                                                );
+                                              },
+                                              child: const Text(
+                                                "",
+                                                style: TextStyle(color: Color(0xFF60A5FA)),
+                                              ),
+                                            ),
+                                            const Text("  ", style: TextStyle(color: Colors.white54)),
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => const PrivacyPolicyScreen(),
+                                                  ),
+                                                );
+                                              },
+                                              child: const Text(
+                                                "Privacy Policy",
+                                                style: TextStyle(color: Color(0xFF60A5FA)),
+                                              ),
+                                            ),
+                                          ],
+                                        )
                                       ],
                                     ),
                                   ),
@@ -395,6 +508,7 @@ class _AuthScreenState extends State<AuthScreen>
                           ),
                         ),
 
+                        
                         // ✅ Theme toggle (Top Right like modern apps)
                         Positioned(
                           top: 6,
