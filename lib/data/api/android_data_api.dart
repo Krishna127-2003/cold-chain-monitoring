@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../../features/dashboard/utils/telemetry_parser.dart';
-import '../session/session_manager.dart'; // ✅ ADD THIS
+import '../../features/dashboard/models/unified_telemetry.dart';
+import '../../features/dashboard/utils/unified_telemetry_mapper.dart';
+import '../session/session_manager.dart';
 import '../../features/notifications/alert_processor.dart';
 
 class AndroidDataApi {
@@ -12,8 +13,8 @@ class AndroidDataApi {
 
   static final AlertProcessor _alertProcessor = AlertProcessor();
 
-  /// ✅ Fetch PARSED telemetry for ONE device
-  static Future<Map<String, dynamic>?> fetchByDeviceId(String deviceId) async {
+  /// ✅ Fetch unified telemetry (single clean object)
+  static Future<UnifiedTelemetry?> fetchByDeviceId(String deviceId) async {
     final url = Uri.parse("$_baseUrl?device_id=$deviceId");
 
     debugPrint("📡 API CALL → $url");
@@ -28,26 +29,28 @@ class AndroidDataApi {
 
       final raw = jsonDecode(response.body);
 
-      // 🔥 IMPORTANT PART
-      final parsed = TelemetryParser.parse(raw);
+      // 🎯 Convert once only
+      final telemetry = UnifiedTelemetryMapper.fromApi(raw);
 
-      // 🚨 ALERT CHECK (production safe place)
-      if (parsed.containsKey("temp") && parsed.containsKey("setv")) {
+      if (telemetry == null) return null;
+
+      // 🚨 Centralized alert processing
+      if (telemetry.pv != null && telemetry.sv != null) {
         await _alertProcessor.process(
-          pv: (parsed["temp"] as num).toDouble(),
-          sv: (parsed["setv"] as num).toDouble(),
+          pv: telemetry.pv!,
+          sv: telemetry.sv!,
         );
       }
 
-      // ✅ SAVE LAST SYNC TIME HERE (VERY IMPORTANT)
+      // ⏱ Save last sync
       await SessionManager.saveLastSync(
         deviceId,
         DateTime.now().toUtc(),
       );
 
-      debugPrint("✅ FLAT TELEMETRY → $parsed");
+      debugPrint("✅ TELEMETRY OBJECT → ${telemetry.alarm}");
 
-      return parsed; // ✅ NOT raw anymore
+      return telemetry;
     } catch (e) {
       debugPrint("❌ API EXCEPTION $e");
       return null;

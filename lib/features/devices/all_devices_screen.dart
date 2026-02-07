@@ -11,6 +11,7 @@ import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
 import '../../data/session/session_manager.dart';
 import '../../data/models/registered_device.dart';
+import '../dashboard/models/unified_telemetry.dart';
 
 
 class AllDevicesScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   /// ✅ FIX A) Prevent multiple redirects loop
   Timer? _tempTimer;
-  Map<String, dynamic> _latestData = {};
+  UnifiedTelemetry? _latestTelemetry;
   bool _loadingTemps = false;
 
   void _toggleEditMode() {
@@ -87,18 +88,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     super.dispose();
   }
 
-  Map<String, dynamic>? _getDeviceData(String deviceId) {
-    if (_latestData.isEmpty) return null;
-
-    final apiDeviceId =
-        (_latestData["device_id"] ?? "").toString();
-
-    if (apiDeviceId == deviceId) {
-      return _latestData;
-    }
-
-    return null;
-  }
+  // NOTE: telemetry is stored in `_latestTelemetry` (UnifiedTelemetry)
 
   Future<void> _loadDevices() async {
     setState(() => _loadingDevices = true);
@@ -156,34 +146,28 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
       return;
     }
 
-    final data = await AndroidDataApi.fetchByDeviceId(deviceId);
+    final telemetry = await AndroidDataApi.fetchByDeviceId(deviceId);
 
     if (!mounted) return;
 
     setState(() {
-      _latestData = data ?? {};
+      _latestTelemetry = telemetry;
       _loadingTemps = false;
     });
   }
 
 
   String _getSystemStatusForDevice(String deviceId) {
-    final d = _getDeviceData(deviceId);
-    if (d == null) return "--";
+    final t = _latestTelemetry;
+    if (t == null) return "--";
 
-    final error = d["Error"] ?? d["error"] ?? "0";
-
-    return error.toString() == "0" ? "HEALTHY" : "FAILURE";
+    return t.alarm == "NORMAL" ? "HEALTHY" : "FAILURE";
   }
 
   String? _getTempForDevice(String deviceId) {
-    final d = _getDeviceData(deviceId);
-    if (d == null) return null;
-
-    // Dynamic priority:
-    // temp → pv → sv
-    final temp = d["temp"] ?? d["pv"] ?? d["sv"];
-    return temp?.toString();
+    final t = _latestTelemetry;
+    if (t?.pv == null) return null;
+    return t!.pv!.toStringAsFixed(1);
   }
 
 
@@ -384,7 +368,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                   final dept = "-";              // placeholder
                   final equipmentType = d.serviceType;
                   final status = _getSystemStatusForDevice(deviceId);
-                  debugPrint("SavedDevices device=$deviceId data=${_getDeviceData(deviceId)}");
 
                   final selected = _selected.contains(deviceId);
 

@@ -1,16 +1,17 @@
 // ignore_for_file: deprecated_member_use
-
+import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/api/android_data_api.dart';
 import '../notifications/notification_service.dart';
-import 'widgets/status_row.dart';
 import 'widgets/dashboard_top_bar.dart';
-import 'widgets/last_sync_row.dart';
+
 import '../notifications/alert_engine.dart';
 import '../notifications/alert_settings.dart';
 import '../notifications/alert_settings_storage.dart';
+
+import 'models/unified_telemetry.dart';
 
 class PaiDashboardScreen extends StatefulWidget {
   final String deviceId;
@@ -23,114 +24,56 @@ class PaiDashboardScreen extends StatefulWidget {
 
 class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
   Timer? _timer;
-  bool _loading = false;
+
+  UnifiedTelemetry? _telemetry;
   DateTime? _lastSync;
+  bool _loading = false;
+
   final AlertEngine _alertEngine = AlertEngine();
   AlertSettings? _settings;
 
-  Map<String, dynamic> _data = {};
-
-  double? _double(String k) =>
-      double.tryParse(_data[k]?.toString() ?? "");
-
-  int _int(String k) =>
-      int.tryParse(_data[k]?.toString() ?? "") ?? 0;
-
-  // ======================
-  // 🚨 SMART ALARM ENGINE
-  // ======================
-
-  String alarmText() {
-    final battery = _int("battery");
-    final pv = _double("pv");
-    final sv = _double("sv");
-
-    if (battery > 0 && battery < 20) {
-      return "LOW BATTERY";
-    }
-
-    if (pv != null && sv != null && pv > sv + 1.5) {
-      return "HIGH TEMP";
-    }
-
-    if (pv != null && sv != null && pv < sv - 1.5) {
-      return "LOW TEMP";
-    }
-
-    return "NORMAL";
-  }
-
-  Color alarmColor() {
-    switch (alarmText()) {
-      case "HIGH TEMP":
-        return Colors.redAccent;
-      case "LOW TEMP":
-        return Colors.lightBlueAccent;
-      case "LOW BATTERY":
-        return Colors.orangeAccent;
-      default:
-        return Colors.greenAccent;
-    }
-  }
-
-  // ======================
-
-  String tempValue(String k) {
-    final v = _double(k);
-    if (v == null) return "--";
-    return "${v.toStringAsFixed(1)}°C";
-  }
-
-  String onOff(String k) => _int(k) == 1 ? "ON" : "OFF";
+  // ================= FETCH =================
 
   Future<void> _fetch() async {
     if (_loading) return;
     setState(() => _loading = true);
 
-    final data = await AndroidDataApi.fetchByDeviceId(widget.deviceId);
     if (!mounted) return;
 
-    if (data == null) {
-      setState(() => _loading = false);
-      return;
-    }
+    final telemetry = await AndroidDataApi.fetchByDeviceId(widget.deviceId);
 
     setState(() {
-      _data = Map<String, dynamic>.from(data);
-      _loading = false;
+      _telemetry = telemetry;
       _lastSync = DateTime.now();
+      _loading = false;
     });
 
-    final pv = _double("pv");
-    final sv = _double("sv");
-
-    if (_settings != null && pv != null && sv != null) {
+    if (_settings != null &&
+        telemetry?.pv != null &&
+        telemetry?.sv != null) {
       final shouldAlert = _alertEngine.shouldTrigger(
-        pv: pv,
-        sv: sv,
+        pv: telemetry!.pv!,
+        sv: telemetry.sv!,
         settings: _settings!,
       );
 
       if (shouldAlert) {
         await NotificationService.send(
           "Cold Chain Alert",
-          "Temperature is abnormal for extended time",
+          "Temperature abnormal for extended time",
         );
       }
     }
   }
 
   Future<void> _loadAlertSettings() async {
-    final data = await AlertSettingsStorage.load();
-
-    setState(() {
-      _settings = AlertSettings(
-        app: data["app"],
-        email: data["email"],
-        sms: data["sms"],
-        level: data["level"],
-      );
-    });
+    final d = await AlertSettingsStorage.load();
+    _settings = AlertSettings(
+      app: d["app"],
+      email: d["email"],
+      sms: d["sms"],
+      level: d["level"],
+    );
   }
 
   @override
@@ -147,124 +90,192 @@ class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
     super.dispose();
   }
 
+  // ================= UI HELPERS =================
+
+  bool isStale() =>
+      _lastSync == null ||
+      DateTime.now().difference(_lastSync!).inMinutes > 5;
+
+  String timeAgo() {
+    if (_lastSync == null) return "Never";
+    final d = DateTime.now().difference(_lastSync!);
+    if (d.inSeconds < 60) return "a few seconds ago";
+    if (d.inMinutes < 60) return "${d.inMinutes} min ago";
+    return "${d.inHours} hrs ago";
+  }
+
+  Widget glassCard(Widget child) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(32),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(26),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(32),
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.12),
+                Colors.white.withValues(alpha: 0.02),
+              ],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget pillRow(String label, String value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        color: Colors.white.withValues(alpha: 0.06),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                color: Colors.white60,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1,
+              )),
+          Text(value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              )),
+        ],
+      ),
+    );
+  }
+
+  // ================= UI =================
+
   @override
   Widget build(BuildContext context) {
-    final pv = tempValue("pv");
-    final sv = tempValue("sv");
-    final power = onOff("power");
-    final battery = _int("battery");
+    final t = _telemetry;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
         deviceId: widget.deviceId,
-        powerText: "Power: $power",
-        batteryText: battery == 0 ? "--%" : "$battery%",
+        powerText:
+            t == null ? "Power: --" : "Power: ${t.powerOn ? "ON" : "OFF"}",
+        batteryText:
+            t == null ? "--%" : "${t.battery}%",
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
+        padding: const EdgeInsets.all(18),
         child: Column(
           children: [
-            const SizedBox(height: 18),
+            glassCard(
+              Column(
+                children: [
+                  const Text(
+                    "PLATELET AGITATOR INCUBATOR",
+                    style: TextStyle(
+                      letterSpacing: 2,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
 
-            const Text(
-              "PLATELET AGITATOR INCUBATOR",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF60A5FA),
-                letterSpacing: 1.5,
+                  const SizedBox(height: 18),
+
+                  Text(
+                    t?.pv == null
+                        ? "--.- °C"
+                        : "${t!.pv!.toStringAsFixed(1)} °C",
+                    style: const TextStyle(
+                      fontSize: 66,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      color: Colors.white.withValues(alpha: 0.08),
+                      border:
+                          Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    child: Text(
+                      t?.sv == null
+                          ? "SET --.- °C"
+                          : "SET ${t!.sv!.toStringAsFixed(1)} °C",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.sync,
+                          size: 14, color: Colors.white54),
+                      const SizedBox(width: 6),
+                      Text(
+                        "Last sync: ${timeAgo()}",
+                        style: TextStyle(
+                          color: isStale()
+                              ? Colors.orangeAccent
+                              : Colors.white54,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    "DEVICE ID : ${widget.deviceId}",
+                    style: const TextStyle(color: Colors.white38),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 14),
-
-            const Text("PV",
-                style: TextStyle(color: Colors.white70, fontSize: 18)),
-            const SizedBox(height: 6),
-            Text(
-              pv,
-              style: const TextStyle(
-                fontSize: 64,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF22C55E),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            Text(
-              "SV  $sv",
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF38BDF8),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            LastSyncRow(
-              lastSync: _lastSync,
-              loading: _loading,
             ),
 
             const SizedBox(height: 22),
-            Divider(color: Colors.white.withValues(alpha: 0.12)),
-            const SizedBox(height: 10),
 
-            StatusRow(
-              icon: Icons.sync,
-              label: "Agitator",
-              value: onOff("agitator"),
-              isGood: _int("agitator") == 1,
-            ),
+            glassCard(
+              Column(
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "DEVICE DETAILS",
+                      style: TextStyle(
+                        color: Colors.white60,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
 
-            StatusRow(
-              icon: Icons.settings,
-              label: "Compressor",
-              value: onOff("compressor"),
-              isGood: _int("compressor") == 1,
-            ),
+                  const SizedBox(height: 16),
 
-            StatusRow(
-              icon: Icons.local_fire_department_outlined,
-              label: "Heater",
-              value: onOff("heater"),
-              isGood: _int("heater") == 0,
-            ),
-
-            StatusRow(
-              icon: Icons.thermostat,
-              label: "Probe",
-              value: _int("probe") == 1 ? "OK" : "FAIL",
-              isGood: _int("probe") == 1,
-            ),
-
-            // 🚨 SMART ALARM ROW
-            StatusRow(
-              icon: Icons.notifications_active,
-              label: "Alarm",
-              value: alarmText(),
-              valueColor: alarmColor(),
-              isGood: alarmText() == "NORMAL",
-            ),
-
-            StatusRow(
-              icon: Icons.battery_full,
-              label: "Battery",
-              value: battery == 0 ? "--%" : "$battery%",
-              valueColor:
-                  battery < 20 ? Colors.orangeAccent : Colors.greenAccent,
-              isGood: battery >= 20,
-            ),
-
-            const SizedBox(height: 20),
-
-            Text(
-              "Device ID: ${widget.deviceId}",
-              style: const TextStyle(color: Colors.white38),
+                  pillRow("AGITATOR", t?.agitator == true ? "ON" : "OFF"),
+                  pillRow("COMPRESSOR", t?.compressor == true ? "ON" : "OFF"),
+                  pillRow("HEATER", t?.heater == true ? "ON" : "OFF"),
+                  pillRow("PROBE", t?.probeOk == true ? "OK" : "FAIL"),
+                  pillRow("ALARM", t?.alarm ?? "NORMAL"),
+                  pillRow("BATTERY", t == null ? "--%" : "${t.battery}%"),
+                ],
+              ),
             ),
 
             const SizedBox(height: 28),

@@ -7,11 +7,12 @@ import '../../data/api/android_data_api.dart';
 import '../../data/session/session_manager.dart';
 import '../notifications/notification_service.dart';
 import 'widgets/dashboard_top_bar.dart';
-import 'models/device_status.dart';
-import 'utils/device_status_mapper.dart';
+
 import '../notifications/alert_engine.dart';
 import '../notifications/alert_settings.dart';
 import '../notifications/alert_settings_storage.dart';
+
+import 'models/unified_telemetry.dart';
 
 class DeepFreezerDashboardScreen extends StatefulWidget {
   final String deviceId;
@@ -29,7 +30,8 @@ class DeepFreezerDashboardScreen extends StatefulWidget {
 class _DeepFreezerDashboardScreenState
     extends State<DeepFreezerDashboardScreen> {
   Timer? _timer;
-  DeviceStatus? _status;
+
+  UnifiedTelemetry? _telemetry;
   DateTime? _lastSync;
   bool _loading = false;
 
@@ -56,25 +58,28 @@ class _DeepFreezerDashboardScreenState
     if (_loading) return;
     setState(() => _loading = true);
 
-    final telemetry =
-        await AndroidDataApi.fetchByDeviceId(widget.deviceId);
+    
     if (!mounted) return;
 
     final lastSync =
         await SessionManager.getLastSync(widget.deviceId);
 
+    final telemetry = await AndroidDataApi.fetchByDeviceId(widget.deviceId);
+
+
     setState(() {
-      _status = telemetry == null
-          ? null
-          : DeviceStatusMapper.fromApi(telemetry);
+      _telemetry = telemetry;
       _lastSync = lastSync;
       _loading = false;
     });
 
-    if (_settings != null && _status?.pv != null && _status?.sv != null) {
+    // 🔔 Smart alerts (unchanged behavior)
+    if (_settings != null &&
+        telemetry?.pv != null &&
+        telemetry?.sv != null) {
       final fire = _alertEngine.shouldTrigger(
-        pv: _status!.pv!,
-        sv: _status!.sv!,
+        pv: telemetry!.pv!,
+        sv: telemetry.sv!,
         settings: _settings!,
       );
 
@@ -111,7 +116,7 @@ class _DeepFreezerDashboardScreenState
     super.dispose();
   }
 
-  // ================= GLASS HELPERS =================
+  // ================= GLASS UI =================
 
   Widget glassCard(Widget child) {
     return ClipRRect(
@@ -165,36 +170,8 @@ class _DeepFreezerDashboardScreenState
     );
   }
 
-  // ================= ALARM =================
-
-  String alarmText(DeviceStatus s) {
-    if (s.batteryPercent < 20) return "LOW BATTERY";
-    if (s.pv! > s.sv! + 2) return "HIGH TEMP";
-    if (s.pv! < s.sv! - 2) return "LOW TEMP";
-    if (s.alarmActive) return "ACTIVE";
-    return "OFF";
-  }
-
-  Color alarmColor(DeviceStatus s) {
-    switch (alarmText(s)) {
-      case "HIGH TEMP":
-      case "ACTIVE":
-        return Colors.redAccent;
-      case "LOW BATTERY":
-        return Colors.orangeAccent;
-      case "LOW TEMP":
-        return Colors.lightBlueAccent;
-      default:
-        return Colors.greenAccent;
-    }
-  }
-
-  String compressorText() {
-    final s = _status;
-    if (s == null) return "--";
-    if (!s.compressorOn) return "OFF";
-    if (s.highAmp) return "ON  HIGH A";
-    if (s.lowAmp) return "ON  LOW A";
+  String compressorText(UnifiedTelemetry t) {
+    if (!t.compressor) return "OFF";
     return "ON";
   }
 
@@ -202,15 +179,16 @@ class _DeepFreezerDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final s = _status;
+    final t = _telemetry;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
         deviceId: widget.deviceId,
         powerText:
-            s == null ? "Power: --" : "Power: ${s.powerOn ? "ON" : "OFF"}",
-        batteryText: s == null ? "0%" : "${s.batteryPercent}%",
+            t == null ? "Power: --" : "Power: ${t.powerOn ? "ON" : "OFF"}",
+        batteryText:
+            t == null ? "0%" : "${t.battery}%",
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
@@ -228,21 +206,20 @@ class _DeepFreezerDashboardScreenState
                     ),
                   ),
                   const SizedBox(height: 18),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
-                    child: Text(
-                      s?.pv == null
-                          ? "--.- °C"
-                          : "${s!.pv!.toStringAsFixed(1)} °C",
-                      key: ValueKey(s?.pv),
-                      style: const TextStyle(
-                        fontSize: 66,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
+
+                  Text(
+                    t?.pv == null
+                        ? "--.- °C"
+                        : "${t!.pv!.toStringAsFixed(1)} °C",
+                    style: const TextStyle(
+                      fontSize: 66,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
                     ),
                   ),
+
                   const SizedBox(height: 12),
+
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 8),
@@ -253,13 +230,15 @@ class _DeepFreezerDashboardScreenState
                           Border.all(color: Colors.white.withValues(alpha: 0.15)),
                     ),
                     child: Text(
-                      s?.sv == null
+                      t?.sv == null
                           ? "SET --.- °C"
-                          : "SET ${s!.sv!.toStringAsFixed(1)} °C",
+                          : "SET ${t!.sv!.toStringAsFixed(1)} °C",
                       style: const TextStyle(color: Colors.white70),
                     ),
                   ),
+
                   const SizedBox(height: 18),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -278,7 +257,9 @@ class _DeepFreezerDashboardScreenState
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 8),
+
                   Text(
                     "DEVICE ID : ${widget.deviceId}",
                     style: const TextStyle(color: Colors.white38),
@@ -304,42 +285,26 @@ class _DeepFreezerDashboardScreenState
                     ),
                   ),
 
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Text(
-                        "SYSTEM ",
-                        style: TextStyle(
-                          color: Colors.white60,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        s == null
-                            ? "--"
-                            : (s.systemOk ? "HEALTHY" : "ERROR"),
-                        style: TextStyle(
-                          color: s == null
-                              ? Colors.white54
-                              : (s.systemOk ? Colors.greenAccent : Colors.redAccent),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-
                   const SizedBox(height: 16),
 
+                  pillRow("POWER",
+                      t == null ? "--" : (t.powerOn ? "ON" : "OFF")),
 
-                  pillRow("POWER", s == null ? "--" : (s.powerOn ? "ON" : "OFF")),
-                  pillRow("BATTERY", s == null ? "--" : "${s.batteryPercent} %"),
-                  pillRow("COMPRESSOR", s == null ? "--" : compressorText()),
-                  pillRow("ALARMS", s == null ? "--" : alarmText(s)),
-                  pillRow("DOOR", s == null ? "--" : (s.doorClosed ? "CLOSED" : "OPEN")),
+                  pillRow("BATTERY",
+                      t == null ? "--" : "${t.battery}%"),
+
+                  pillRow("COMPRESSOR",
+                      t == null ? "--" : compressorText(t)),
+
+                  pillRow("ALARMS",
+                      t?.alarm ?? "NORMAL"),
+
+                  pillRow("PROBE",
+                      t?.probeOk == true ? "OK" : "FAIL"),
                 ],
               ),
             ),
+
             const SizedBox(height: 28),
           ],
         ),
