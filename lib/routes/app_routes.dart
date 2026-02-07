@@ -9,6 +9,7 @@ import '../features/devices/add_device/qr_scan_screen.dart';
 import '../features/devices/add_device/product_key_screen.dart';
 import '../features/devices/add_device/register_device_screen.dart';
 import '../features/devices/all_devices_screen.dart';
+import '../features/notifications/notification_settings_screen.dart';
 
 
 
@@ -23,6 +24,8 @@ class AppRoutes {
   static const String productKey = '/product-key';
   static const String registerDevice = '/register-device';
   static const String allDevices = '/all-devices';
+  static const String notificationSettings = '/notification-settings';
+
 
 
 
@@ -32,6 +35,7 @@ class AppRoutes {
         splash: (_) => const SplashScreen(),
         auth: (_) => const AuthScreen(),
         services: (_) => const ServicesScreen(),
+        
         
 
         // For now, open a default devices list screen.
@@ -49,5 +53,7 @@ class AppRoutes {
         productKey: (_) => const ProductKeyScreen(),
         registerDevice: (_) => const RegisterDeviceScreen(),
         allDevices: (_) => const AllDevicesScreen(),
+
+        notificationSettings: (_) => const NotificationSettingsScreen(),
       };
 }

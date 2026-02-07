@@ -283,7 +283,7 @@ class _DevicesListScreenState extends State<DevicesListScreen> {
                                         color: Theme.of(context)
                                             .colorScheme
                                             .primary
-                                            .withOpacity(0.12),
+                                            .withValues(alpha: 0.12),
                                       ),
                                       child: Icon(
                                         _iconForType(equipmentType),
@@ -381,7 +381,7 @@ class _EmptyState extends StatelessWidget {
                 width: 56,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                 ),
                 child: Icon(
                   icon,

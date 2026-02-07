@@ -40,18 +40,18 @@ class StatusRow extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: verticalPad),
-      child: Row(
+            child: Row(
         children: [
           Container(
             height: iconBox,
             width: iconBox,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+              color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               size: w < 360 ? 18 : 20,
             ),
           ),

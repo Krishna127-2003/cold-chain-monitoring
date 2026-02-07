@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'routes/app_routes.dart';
 import 'firebase_options.dart';
+import 'features/notifications/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,8 @@ Future<void> main() async {
 
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
+
+  await NotificationService.init();
 
   runApp(
     ChangeNotifierProvider.value(

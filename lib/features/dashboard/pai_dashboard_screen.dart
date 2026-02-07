@@ -211,7 +211,7 @@ class _PaiDashboardScreenState extends State<PaiDashboardScreen> {
             ),
 
             const SizedBox(height: 22),
-            Divider(color: Colors.white.withOpacity(0.12)),
+            Divider(color: Colors.white.withValues(alpha: 0.12)),
             const SizedBox(height: 10),
 
             StatusRow(

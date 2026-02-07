@@ -56,7 +56,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
     final bool isTabletOrWeb = width > 600;
 
     final double logoHeight =
-        isSmallMobile ? 26 : (isTabletOrWeb ? 36 : 30);
+        isSmallMobile ? 32 : (isTabletOrWeb ? 44 : 38);
 
     final EdgeInsets logoPadding = EdgeInsets.symmetric(
       horizontal: isSmallMobile ? 10 : (isTabletOrWeb ? 16 : 12),
@@ -71,27 +71,17 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       automaticallyImplyLeading: false,
 
-      /// ⬅️ LOGO (Auth-style, responsive)
+      /// ⬅️ LOGO (clean — no heavy styling)
       leadingWidth: isTabletOrWeb ? 160 : 140,
       leading: Padding(
-        padding: const EdgeInsets.only(left: 12),
+        padding: const EdgeInsets.only(left: 20),
         child: Align(
           alignment: Alignment.centerLeft,
           child: Container(
             padding: logoPadding,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(
-                color: Colors.black.withValues(alpha: 0.6),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                  color: Colors.black.withValues(alpha: 0.25),
-                ),
-              ],
             ),
             child: SvgPicture.asset(
               "assets/images/marken_logo.svg",
@@ -101,7 +91,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
 
-      /// Optional title (rarely used, kept safe)
+      /// Optional title (unchanged)
       title: showTitle && title.isNotEmpty
           ? Text(
               title,
@@ -113,23 +103,13 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
             )
           : null,
 
-      /// 👉 Right-side status + menu
+      /// 👉 Right-side status + menu (power removed)
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 10),
           child: Row(
             children: [
-              /// 🔌 Power
-              Text(
-                powerText,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 14),
-
-              /// 🔋 Battery
+              /// 🔋 Battery only
               Icon(
                 _batteryIcon(batteryText),
                 color: _batteryColor(batteryText),
@@ -145,7 +125,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               const SizedBox(width: 8),
 
-              /// ☰ Menu
+              /// ☰ Menu (unchanged)
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (value) {

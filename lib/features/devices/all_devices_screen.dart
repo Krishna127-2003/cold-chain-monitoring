@@ -427,12 +427,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                               Container(
                                 height: 46,
                                 width: 46,
-                                decoration: BoxDecoration(
+                                  decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
                                   color: Theme.of(context)
                                       .colorScheme
                                       .primary
-                                      .withOpacity(0.12),
+                                      .withValues(alpha: 0.12),
                                 ),
                                 child: Icon(
                                   _iconForType(equipmentType),
@@ -459,6 +459,24 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                         const SizedBox(width: 8),
                                         if (!_isEditMode)
                                           _StatusChip(status: status),
+
+                                          if (!_isEditMode) ...[
+                                          const SizedBox(width: 6),
+
+                                          IconButton(
+                                            icon: const Icon(Icons.notifications_active_outlined),
+                                            tooltip: "Notification settings",
+                                            onPressed: () {
+                                              Navigator.pushNamed(
+                                                context,
+                                                AppRoutes.notificationSettings,
+                                                arguments: {
+                                                  "deviceId": deviceId,
+                                                },
+                                              );
+                                            },
+                                          ),
+                                        ]
                                       ],
                                     ),
                                     const SizedBox(height: 6),
@@ -524,7 +542,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                 width: 56,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                 ),
                 child: Icon(
                   Icons.devices,
@@ -587,9 +605,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.12),
+        color: c.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: c.withOpacity(0.35)),
+        border: Border.all(color: c.withValues(alpha: 0.35)),
       ),
       child: Text(
         status,

@@ -59,6 +59,14 @@
           }
         },
         {
+          "client_id": "653168096175-qs0scuag7jrtbunh4vcdfji7uspjj2tu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marken.coldchain",
+            "certificate_hash": "61b75150d3a1d726ea3450e73b671fa71ae06b9f"
+          }
+        },
+        {
           "client_id": "653168096175-2onbtgkhlk1vj1nttgu1n3b5vlchec8k.apps.googleusercontent.com",
           "client_type": 3
         }
