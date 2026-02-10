@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/auth/auth_screen.dart';
 import '../features/services/services_screen.dart';
-import '../features/devices/devices_list_screen.dart';
 import '../features/dashboard/device_dashboard_screen.dart';
 import '../features/devices/add_device/qr_scan_screen.dart';
 import '../features/devices/add_device/product_key_screen.dart';
@@ -18,7 +17,6 @@ class AppRoutes {
   static const String splash = '/';
   static const String auth = '/auth';
   static const String services = '/services';
-  static const String devices = '/devices';
   static const String dashboard = '/dashboard';
   static const String qrScan = '/qr-scan';
   static const String productKey = '/product-key';
@@ -40,9 +38,8 @@ class AppRoutes {
 
         // For now, open a default devices list screen.
         // Later we will pass equipmentType dynamically.
-        devices: (_) => const DevicesListScreen(
-              equipmentType: 'DEEP_FREEZER',
-            ),
+
+
 
         // Dashboard will open for a demo deviceId for now.
         // Later we will open based on user selection.

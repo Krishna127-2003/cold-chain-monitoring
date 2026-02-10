@@ -78,8 +78,8 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
 
       if (localDevices.isEmpty) {
-        print("➡️ Guest → Services");
-        _go(AppRoutes.services);
+        print("➡️ Guest → allDevices");
+        _go(AppRoutes.allDevices);
       } else {
         print("➡️ Guest → AllDevices (${localDevices.length})");
         _go(AppRoutes.allDevices);
@@ -103,8 +103,8 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
 
       if (localDevices.isEmpty) {
-        print("➡️ Google → Services");
-        _go(AppRoutes.services);
+        print("➡️ Google → allDevices");
+        _go(AppRoutes.allDevices);
       } else {
         print("➡️ Google → AllDevices (${localDevices.length})");
         _go(AppRoutes.allDevices);
@@ -154,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen>
     final padding = (size.width * 0.08).clamp(18.0, 32.0);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.all(padding),

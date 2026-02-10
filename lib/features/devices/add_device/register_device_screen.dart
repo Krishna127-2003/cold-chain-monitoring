@@ -57,7 +57,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
             const SizedBox(height: 8),
             Text(
               "Service: ${equipmentType.replaceAll('_', ' ')}",
-              style: TextStyle(color: Colors.grey.shade600),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
 
@@ -163,8 +163,12 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                         /// 3️⃣ GO TO SAVED DEVICES
                         Navigator.pushNamedAndRemoveUntil(
                           context,
-                          AppRoutes.allDevices,
+                          AppRoutes.dashboard,
                           (route) => false,
+                          arguments: {
+                            "deviceId": deviceId,
+                            "equipmentType": equipmentType,
+                          },
                         );
                       },
                 child: Text(

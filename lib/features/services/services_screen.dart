@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/utils/responsive.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
-import '../../data/session/session_manager.dart';
 import '../auth/google_auth_service.dart';
 
 class ServicesScreen extends StatefulWidget {
@@ -18,44 +16,84 @@ class ServicesScreen extends StatefulWidget {
 class _ServicesScreenState extends State<ServicesScreen> {
   bool _loggingOut = false;
 
-  String? _email;
-  String? _loginType;
-  String? _photoUrl;
+  /// 🔥 NEW: Ask how user wants to add device
+  void _chooseAddMethod(BuildContext context, String equipmentType) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 4,
+                width: 40,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                "Add ${equipmentType.replaceAll("_", " ")} device",
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Choose how you want to add the device",
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
 
-  @override
-  void initState() {
-    super.initState();
-    _loadSessionInfo();
-  }
+              /// 📷 Scan QR
+              ListTile(
+                leading: const Icon(Icons.qr_code_scanner),
+                title: const Text("Scan QR Code"),
+                subtitle: const Text("Use camera to scan device QR"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.qrScan,
+                    arguments: {
+                      "equipmentType": equipmentType,
+                    },
+                  );
+                },
+              ),
 
-  /// 🔄 LOAD SESSION + GOOGLE PROFILE
-  Future<void> _loadSessionInfo() async {
-    final email = await SessionManager.getEmail();
-    final type = await SessionManager.getLoginType();
+              const SizedBox(height: 8),
 
-    String? photo;
-    if (type == "google") {
-      photo = FirebaseAuth.instance.currentUser?.photoURL;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _email = email;
-      _loginType = type;
-      _photoUrl = photo;
-    });
-  }
-
-  void _openDevices(BuildContext context, String equipmentType) {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.devices,
-      arguments: {"equipmentType": equipmentType},
+              /// ⌨️ Manual Entry
+              ListTile(
+                leading: const Icon(Icons.keyboard),
+                title: const Text("Enter Code Manually"),
+                subtitle:
+                    const Text("Type device code if QR is unavailable"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.productKey,
+                    arguments: {
+                      "equipmentType": equipmentType,
+                      "manualEntry": true, // ✅ future-proof flag
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  /// 🔐 CONFIRM LOGOUT DIALOG
+  /// 🔐 CONFIRM LOGOUT
   Future<void> _confirmLogout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -78,9 +116,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       ),
     );
 
-    if (confirmed == true) {
-      _logout();
-    }
+    if (confirmed == true) _logout();
   }
 
   /// 🔥 LOGOUT FLOW
@@ -89,7 +125,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
     try {
       await GoogleAuthService.signOut();
-      await SessionManager.logout();
     } catch (_) {}
 
     if (!mounted) return;
@@ -104,53 +139,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
   @override
   Widget build(BuildContext context) {
     final pad = Responsive.pad(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final primaryText = isDark ? Colors.white : Colors.black87;
-    final secondaryText = isDark ? Colors.white70 : Colors.black54;
-    final avatarBg =
-        isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.06);
+    final primaryText = Theme.of(context).textTheme.titleMedium?.color;
 
     return Stack(
       children: [
         Scaffold(
           appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Services", style: TextStyle(color: primaryText)),
-                Text(
-                  _loginType == "google"
-                      ? (_email ?? "")
-                      : "Guest User",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: secondaryText,
-                  ),
-                ),
-              ],
-            ),
+            title: const Text("Services"),
             actions: [
-              /// 👤 PROFILE PHOTO / FALLBACK
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: avatarBg,
-                  backgroundImage:
-                      (_loginType == "google" && _photoUrl != null)
-                          ? NetworkImage(_photoUrl!)
-                          : null,
-                  child: (_loginType != "google" || _photoUrl == null)
-                      ? Icon(Icons.person, size: 18, color: primaryText)
-                      : null,
-                ),
-              ),
-
               const _ThemeMenuButton(),
               const SizedBox(width: 4),
-
               PopupMenuButton<String>(
                 tooltip: "Account",
                 icon: Icon(Icons.more_vert, color: primaryText),
@@ -173,7 +171,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
               const SizedBox(width: 6),
             ],
           ),
-
           body: Padding(
             padding: EdgeInsets.all(pad),
             child: Column(
@@ -201,26 +198,27 @@ class _ServicesScreenState extends State<ServicesScreen> {
                         title: "Deep Freezer",
                         subtitle: "Ultra-low monitoring",
                         icon: Icons.ac_unit,
-                        onTap: () => _openDevices(context, "DEEP_FREEZER"),
+                        onTap: () =>
+                            _chooseAddMethod(context, "DEEP_FREEZER"),
                       ),
                       _ServiceCard(
                         title: "BBR",
                         subtitle: "Blood bank safety",
                         icon: Icons.medical_services_outlined,
-                        onTap: () => _openDevices(context, "BBR"),
+                        onTap: () => _chooseAddMethod(context, "BBR"),
                       ),
                       _ServiceCard(
                         title: "Platelet Incubator",
                         subtitle: "Agitation + temp control",
                         icon: Icons.science_outlined,
-                        onTap: () => _openDevices(context, "PLATELET"),
+                        onTap: () => _chooseAddMethod(context, "PLATELET"),
                       ),
                       _ServiceCard(
                         title: "Walk-in Cooler",
                         subtitle: "Cold room monitoring",
                         icon: Icons.warehouse_outlined,
                         onTap: () =>
-                            _openDevices(context, "WALK_IN_COOLER"),
+                            _chooseAddMethod(context, "WALK_IN_COOLER"),
                       ),
                     ],
                   ),
@@ -243,7 +241,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
   }
 }
 
-/* ---------------- THEME BUTTON & CARD (UNCHANGED) ---------------- */
+/* ---------------- THEME BUTTON & CARD ---------------- */
 
 class _ThemeMenuButton extends StatelessWidget {
   const _ThemeMenuButton();

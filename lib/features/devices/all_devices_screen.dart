@@ -29,14 +29,28 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   bool _loadingDevices = true;
 
   bool _isEditMode = false;
+  String _welcomeName = "Guest";
 
   /// selected deviceIds
   final Set<String> _selected = {};
 
   /// ✅ FIX A) Prevent multiple redirects loop
   Timer? _tempTimer;
-  UnifiedTelemetry? _latestTelemetry;
+  final Map<String, UnifiedTelemetry> _telemetryByDevice = {};
   bool _loadingTemps = false;
+
+  bool isDeviceOnline(String deviceId) {
+    final t = _telemetryByDevice[deviceId];
+    if (t?.timestamp == null) return false;
+
+    return DateTime.now()
+        .difference(t!.timestamp!)
+        .inMinutes <= 5;
+  }
+
+  bool hasNoData(String deviceId) {
+    return _telemetryByDevice[deviceId] == null;
+  }
 
   void _toggleEditMode() {
     setState(() {
@@ -73,6 +87,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   void initState() {
     super.initState();
 
+    _loadWelcomeUser();   // 👈 ADD THIS
     _loadDevices(); // 👈 ADD THIS
 
     // ✅ refresh every 60 seconds when saved devices screen is open
@@ -86,6 +101,28 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   void dispose() {
     _tempTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadWelcomeUser() async {
+    final loginType = await SessionManager.getLoginType();
+
+    if (loginType == "google") {
+      final user = GoogleAuthService.currentUser();
+      final fullName = user?.displayName;
+
+      if (fullName != null && fullName.trim().isNotEmpty) {
+        final firstName = fullName.split(" ").first;
+        setState(() {
+          _welcomeName = firstName;
+        });
+        return;
+      }
+    }
+
+    // fallback (guest or unknown)
+    setState(() {
+      _welcomeName = "Guest";
+    });
   }
 
   // NOTE: telemetry is stored in `_latestTelemetry` (UnifiedTelemetry)
@@ -118,58 +155,42 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   Future<void> _loadTemps() async {
-    if (!mounted) return;
-
-    // ✅ SAFETY: devices not loaded yet
-    if (_devices.isEmpty) {
-      debugPrint("⏸ Skipping temp load: no devices yet");
-      return;
-    }
+    if (!mounted || _devices.isEmpty) return;
 
     setState(() => _loadingTemps = true);
 
-    // ✅ TEMP: only fetch known working device
-    final workingDevice = _devices.firstWhere(
-      (d) => d.deviceId == "5191",
-      orElse: () => _devices.first,
-    );
+    for (final d in _devices) {
+      final rawId = d.deviceId;
 
-    final rawId = workingDevice.deviceId;
+      final deviceId = rawId.contains("device_id=")
+          ? Uri.parse(rawId).queryParameters["device_id"]
+          : rawId;
 
-    // ✅ extract numeric deviceId if URL was stored
-    final deviceId = rawId.contains("device_id=")
-        ? Uri.parse(rawId).queryParameters["device_id"]
-        : rawId;
+      if (deviceId == null) continue;
 
-    if (deviceId == null) {
-      debugPrint("❌ Invalid deviceId: $rawId");
-      return;
+      final telemetry = await AndroidDataApi.fetchByDeviceId(deviceId);
+
+      if (!mounted) return;
+
+      if (telemetry != null) {
+        _telemetryByDevice[deviceId] = telemetry;
+      }
     }
 
-    final telemetry = await AndroidDataApi.fetchByDeviceId(deviceId);
-
-    if (!mounted) return;
-
-    setState(() {
-      _latestTelemetry = telemetry;
-      _loadingTemps = false;
-    });
+    setState(() => _loadingTemps = false);
   }
 
-
   String _getSystemStatusForDevice(String deviceId) {
-    final t = _latestTelemetry;
+    final t = _telemetryByDevice[deviceId];
     if (t == null) return "--";
-
-    return t.alarm == "NORMAL" ? "HEALTHY" : "FAILURE";
+    return t.systemHealthy ? "HEALTHY" : "FAILURE";
   }
 
   String? _getTempForDevice(String deviceId) {
-    final t = _latestTelemetry;
+    final t = _telemetryByDevice[deviceId];
     if (t?.pv == null) return null;
     return t!.pv!.toStringAsFixed(1);
   }
-
 
   Future<bool> _confirmDelete(BuildContext context, int count) async {
     final result = await showDialog<bool>(
@@ -353,7 +374,22 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
             ),
 
       body: Padding(
-        padding: EdgeInsets.all(padding),
+  padding: EdgeInsets.all(padding),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+
+      // 👋 WELCOME TEXT
+      Text(
+        "Welcome, $_welcomeName",
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+      ),
+
+      const SizedBox(height: 16),
+
+      Expanded(
         child: _loadingDevices
             ? const Center(child: CircularProgressIndicator())
             : devices.isEmpty
@@ -373,6 +409,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
                   // ✅ ONLY REQUIRED ADDITION: live temp read
                   final liveTemp = _getTempForDevice(deviceId);
+                  final telemetry = _telemetryByDevice[deviceId];
+
+
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -470,15 +509,53 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 6),
-                                    Text(
-                                      "Device ID: $deviceId",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFF64748B),
-                                            fontWeight: FontWeight.w600,
+                                    Row(
+                                      children: [
+                                        Text(
+                                          "Device ID: $deviceId",
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(context).textTheme.bodySmall?.color,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+
+                                        const SizedBox(width: 8),
+
+                                        if (!_loadingTemps && telemetry != null)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: isDeviceOnline(deviceId)
+                                                  ? Colors.green.withValues(alpha: 0.15)
+                                                  : Colors.red.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.circle,
+                                                  size: 7,
+                                                  color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  isDeviceOnline(deviceId) ? "Online" : "Offline",
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
+                                      ],
                                     ),
 
                                     // ✅ ONLY REQUIRED ADDITION: TEMP LINE
@@ -486,15 +563,17 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                     Text(
                                       _loadingTemps
                                           ? "Temp: loading..."
-                                          : "Temp: ${liveTemp ?? "--"} °C",
+                                          : telemetry == null
+                                              ? "No data available"
+                                              : "Temp: ${liveTemp!} °C",
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall
                                           ?.copyWith(
                                             fontWeight: FontWeight.w800,
-                                            color: liveTemp == null
-                                                ? const Color(0xFF64748B)
-                                                : Colors.blue,
+                                            color: telemetry == null
+                                              ? Theme.of(context).disabledColor
+                                              : Theme.of(context).colorScheme.primary,
                                           ),
                                     ),
                                   ],
@@ -509,6 +588,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                 },
               ),
       ),
+    ],
+  ),
+    ),
     );
   }
 

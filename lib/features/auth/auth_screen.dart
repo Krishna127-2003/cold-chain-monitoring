@@ -82,7 +82,7 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Future<void> _goNext() async {
-    Navigator.pushReplacementNamed(context, AppRoutes.services);
+    Navigator.pushReplacementNamed(context, AppRoutes.allDevices  );
   }
 
 
@@ -126,13 +126,14 @@ class _AuthScreenState extends State<AuthScreen>
     );
 
     /// ✅ 3. SYNC BACKEND DEVICES (THIS WAS MISSING)
-    final backendHasDevices = await DeviceSyncService.syncFromBackend(
+    await DeviceSyncService.syncFromBackend(
       email: email,
       loginType: "google",
     );
 
+
     /// ✅ 4. CHECK LOCAL DEVICES AFTER SYNC
-    final localDevices = await _deviceRepo.getRegisteredDevices(
+    await _deviceRepo.getRegisteredDevices(
       email: email,
       loginType: "google",
     );
@@ -142,13 +143,8 @@ class _AuthScreenState extends State<AuthScreen>
     if (!mounted) return;
 
     /// ✅ 5. NAVIGATE CORRECTLY
-    if (backendHasDevices || localDevices.isNotEmpty) {
-      Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
-    } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.services);
-    }
+    Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
   }
-
 
   Future<void> _onGuestPressed() async {
     if (!acceptedPolicy) {
@@ -417,9 +413,11 @@ class _AuthScreenState extends State<AuthScreen>
                                                     }
                                                   },
                                                 ),
-                                                const Text(
+                                                Text(
                                                   "I agree to the ",
-                                                  style: TextStyle(color: Colors.white70),
+                                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
                                                 ),
                                                 GestureDetector(
                                                   onTap: () {
@@ -452,12 +450,9 @@ class _AuthScreenState extends State<AuthScreen>
                                                   ),
                                                 );
                                               },
-                                              child: const Text(
+                                              child: Text(
                                                 "Read our Privacy Policy to learn how we protect your data.",
-                                                style: TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 11.5,
-                                                ),
+                                                style: Theme.of(context).textTheme.bodySmall,
                                               ),
                                             ),
                                           ],
@@ -482,7 +477,7 @@ class _AuthScreenState extends State<AuthScreen>
                                                 style: TextStyle(color: Color(0xFF60A5FA)),
                                               ),
                                             ),
-                                            const Text("  ", style: TextStyle(color: Colors.white54)),
+                                            const Text("  "),
                                             GestureDetector(
                                               onTap: () {
                                                 Navigator.push(

@@ -28,7 +28,8 @@ dependencies:
   rename: ^3.1.0
   url_launcher: ^6.3.2
   flutter_local_notifications: ^17.0.0
-  
+  connectivity_plus: ^6.0.0
+
   
 dev_dependencies:
   flutter_test:

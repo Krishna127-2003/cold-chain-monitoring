@@ -49,7 +49,7 @@ class LastSyncRow extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           lastSync == null
-              ? "Last sync: Never"
+              ? "Last sync: Connecting..."
               : "Last sync: ${_timeAgo(lastSync!)}",
           style: TextStyle(
             color: isStale() ? Colors.orangeAccent : Colors.white54,

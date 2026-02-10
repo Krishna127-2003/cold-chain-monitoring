@@ -8,7 +8,6 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showTitle;
   final String? deviceId;
 
-  /// ✅ dynamic top-right values
   final String powerText;
   final String batteryText;
 
@@ -28,52 +27,37 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
 
-    // 📱 Responsive values
-    final bool isSmallMobile = width < 360;
-    final bool isTabletOrWeb = width > 600;
-
-    final double logoHeight =
-        isSmallMobile ? 32 : (isTabletOrWeb ? 44 : 38);
+    // 📱 Dynamic logo sizing
+    final double logoHeight = width < 360
+        ? 26
+        : width < 420
+            ? 32
+            : 38;
 
     return AppBar(
-      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+      backgroundColor: Colors.white,
       elevation: 0,
-      automaticallyImplyLeading: false,
 
-      /// ⬅️ LOGO (clean — no heavy styling)
-      leadingWidth: isTabletOrWeb ? 160 : 140,
-      leading: Padding(
-        padding: const EdgeInsets.only(left: 28),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: SvgPicture.asset(
-            "assets/images/marken_logo.svg",
-            height: logoHeight,
-
-          ),
+      /// ⬅ BACK BUTTON (fixed width – never breaks)
+      leading: IconButton(
+        icon: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          size: 18,
+          color: Color.fromARGB(255, 2, 33, 58),
         ),
+        onPressed: () => Navigator.pop(context),
       ),
 
-      /// Optional title (unchanged)
-      title: showTitle && title.isNotEmpty
-          ? Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            )
-          : null,
+      /// 🏥 RESPONSIVE LOGO (centered, auto scales)
+      title: SvgPicture.asset(
+        "assets/images/marken_logo.svg",
+        height: logoHeight,
+        fit: BoxFit.contain,
+      ),
 
-      /// 👉 Right-side status + menu (power removed)
+      centerTitle: true,
+
       actions: [
-  Padding(
-    padding: const EdgeInsets.only(right: 10),
-    child: Row(
-      children: [
-
-        // ⬇️ DOWNLOAD BUTTON (NEW — moved out of menu)
         if (deviceId != null)
           IconButton(
             icon: const Icon(
@@ -86,17 +70,12 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => DownloadPdfScreen(
-                    deviceId: deviceId!,
-                  ),
+                  builder: (_) => DownloadPdfScreen(deviceId: deviceId!),
                 ),
               );
             },
           ),
 
-        const SizedBox(width: 6),
-
-        /// ☰ MENU (unchanged)
         PopupMenuButton<String>(
           icon: const Icon(
             Icons.list_alt_sharp,
@@ -124,10 +103,9 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
+
+        const SizedBox(width: 4),
       ],
-    ),
-  ),
-],
     );
   }
 }
