@@ -6,6 +6,11 @@ class RegisteredDevice {
   final String email;
   final String loginType;
   final DateTime registeredAt;
+  final String displayName;
+  final String department;
+  final String area;
+  final String pin;
+
 
   RegisteredDevice({
     required this.deviceId,
@@ -15,6 +20,10 @@ class RegisteredDevice {
     required this.email,
     required this.loginType,
     required this.registeredAt,
+    required this.displayName,
+    required this.department,
+    required this.area,
+    required this.pin,
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +34,10 @@ class RegisteredDevice {
         "email": email,
         "loginType": loginType,
         "registeredAt": registeredAt.toIso8601String(),
+        "displayName": displayName,
+        "department": department,
+        "area": area,
+        "pin": pin,
       };
 
   factory RegisteredDevice.fromJson(Map<String, dynamic> json) {
@@ -36,6 +49,10 @@ class RegisteredDevice {
       email: json["email"],
       loginType: json["loginType"],
       registeredAt: DateTime.parse(json["registeredAt"]),
+      displayName: json["displayName"] ?? "Unnamed Device",
+      department: json["department"] ?? "Unknown Department",
+      area: json["area"] ?? "Unknown Area",
+      pin: json["pin"] ?? "0000",
     );
   }
 }

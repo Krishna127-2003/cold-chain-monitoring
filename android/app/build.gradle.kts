@@ -9,7 +9,7 @@ plugins {
 }
 
 /**
- * 🔐 Load keystore properties (for release signing)
+ * 🔐 Load keystore properties
  */
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -20,35 +20,34 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.marken.coldchain"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
-        // ✅ FIX: Required for flutter_local_notifications to work on older Android versions
         isCoreLibraryDesugaringEnabled = true
-        
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.marken.coldchain"
-        // ✅ Ensure minSdk is at least 21 for multidex/notifications
-        minSdk = flutter.minSdkVersion 
+        minSdk = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
 
-        // ✅ FIX: Prevents "DexArchiveMergerException" if the app grows large
+        // 🔼 CHANGE THIS EVERY RELEASE
+        versionCode = 14
+        versionName = "1.20.0"
+
         multiDexEnabled = true
+
+        ndk {
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86_64"))
+        }
     }
 
-    /**
-     * 🔑 Signing configs
-     */
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String
@@ -60,9 +59,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true 
+            isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
         }
         debug {
@@ -70,9 +72,6 @@ android {
         }
     }
 
-    /**
-     * ✅ FIX: Support 16 KB memory page sizes (Required for Android 15+)
-     */
     packaging {
         jniLibs {
             useLegacyPackaging = false
@@ -86,33 +85,5 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
-    
-    // ✅ FIX: The library that enables modern Java features (Desugaring)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-}
-
-/**
- * ✅ FIX: Copy APK into Flutter expected folder so flutter run can find it
- */
-val copyDebugApkToFlutter = tasks.register("copyDebugApkToFlutter") {
-    doLast {
-        val apkFrom = file("$buildDir/outputs/apk/debug/app-debug.apk")
-        val apkToDir = file("${rootProject.projectDir.parentFile}/build/app/outputs/flutter-apk")
-
-        apkToDir.mkdirs()
-
-        if (apkFrom.exists()) {
-            apkFrom.copyTo(file("$apkToDir/app-debug.apk"), overwrite = true)
-            println("✅ Copied APK to: $apkToDir/app-debug.apk")
-        } else {
-            println("❌ APK not found at: $apkFrom")
-        }
-    }
-}
-
-/**
- * ✅ attach after assembleDebug safely
- */
-tasks.matching { it.name == "assembleDebug" }.configureEach {
-    finalizedBy(copyDebugApkToFlutter)
 }

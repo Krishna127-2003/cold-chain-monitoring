@@ -10,6 +10,8 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   final String powerText;
   final String batteryText;
+  final String? equipmentType;
+
 
   const DashboardTopBar({
     super.key,
@@ -18,6 +20,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.powerText = "Power: --",
     this.batteryText = "--%",
     this.deviceId,
+    this.equipmentType,
   });
 
   @override
@@ -45,7 +48,13 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
           size: 18,
           color: Color.fromARGB(255, 2, 33, 58),
         ),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          } else {
+            Navigator.pushNamed(context, AppRoutes.allDevices);
+          }
+        },
       ),
 
       /// 🏥 RESPONSIVE LOGO (centered, auto scales)
@@ -85,11 +94,14 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == "saved_devices") {
               Navigator.pushNamed(context, AppRoutes.allDevices);
             } else if (value == "add_new_device") {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                AppRoutes.services,
-                (route) => false,
-              );
+              Navigator.pushReplacementNamed(
+              context,
+              AppRoutes.dashboard,
+              arguments: {
+                "deviceId": deviceId,
+                "equipmentType": equipmentType,
+              },
+            );
             }
           },
           itemBuilder: (_) => const [

@@ -7,8 +7,9 @@ import 'wic_dashboard_screen.dart';
 
 class DeviceDashboardScreen extends StatelessWidget {
   final String deviceId;
+  final String equipmentType;
 
-  const DeviceDashboardScreen({super.key, required this.deviceId});
+  const DeviceDashboardScreen({super.key, required this.deviceId, required this.equipmentType});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +17,7 @@ class DeviceDashboardScreen extends StatelessWidget {
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
     final activeDeviceId = args?["deviceId"] ?? deviceId;
-    final equipmentType = args?["equipmentType"] ?? "UNKNOWN";
+    final equipmentType = args?["equipmentType"] ?? this.equipmentType;
 
     switch (equipmentType) {
       case "DEEP_FREEZER":

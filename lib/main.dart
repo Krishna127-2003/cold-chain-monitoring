@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-
+import 'features/dashboard/device_dashboard_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'routes/app_routes.dart';
@@ -52,6 +52,20 @@ class ColdChainApp extends StatelessWidget {
       initialRoute: AppRoutes.splash,
       scaffoldMessengerKey: rootMessengerKey,
       routes: AppRoutes.routes,
+
+      onGenerateRoute: (settings) {
+        if (settings.name == AppRoutes.dashboard) {
+          final args = settings.arguments as Map<String, dynamic>;
+
+          return MaterialPageRoute(
+            builder: (_) => DeviceDashboardScreen(
+              deviceId: args["deviceId"],
+              equipmentType: args["equipmentType"] ?? "DEEP_FREEZER",
+            ),
+          );
+        }
+        return null;
+      },
     );
   }
 }

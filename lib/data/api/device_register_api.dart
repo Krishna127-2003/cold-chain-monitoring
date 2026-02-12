@@ -26,6 +26,7 @@ class DeviceRegisterApi {
         "serviceType": serviceType,
         "platform": "flutter",
         "registeredAt": DateTime.now().toUtc().toIso8601String(),
+        
       };
 
       final res = await http.post(

@@ -73,7 +73,8 @@ class SessionManager {
   /// ✅ Logout
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    print("🔓 Session CLEARED");
+    await prefs.remove(_keyLoggedIn);
+    await prefs.remove(_keyLoginType);
+    await prefs.remove(_keyEmail);
   }
 }

@@ -114,10 +114,14 @@ class _AuthScreenState extends State<AuthScreen>
     final email = userCredential.user!.email!;
 
     /// ✅ 1. SEND USER INFO TO AZURE (NEW)
-    await UserInfoApi.sendUserInfo(
-      email: email,
-      loginType: "google",
-    );
+    final exists = await UserInfoApi.doesUserExist(email);
+
+    if (!exists) {
+      await UserInfoApi.sendUserLogin(
+        email: email,
+        loginType: "google",
+      );
+    }
 
     /// ✅ 2. SAVE SESSION LOCALLY
     await SessionManager.saveLogin(
@@ -160,10 +164,14 @@ class _AuthScreenState extends State<AuthScreen>
 
     if (!mounted) return;
 
-    await UserInfoApi.sendUserInfo(
-      email: "guest",
-      loginType: "guest",
-    );
+    final exists = await UserInfoApi.doesUserExist("guest");
+
+    if (!exists) {
+      await UserInfoApi.sendUserLogin(
+        email: "guest",
+        loginType: "guest",
+      );
+    }
 
      /// ✅ SAVE GUEST SESSION
     await SessionManager.saveLogin(loginType: "guest");

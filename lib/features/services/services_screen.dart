@@ -24,11 +24,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Container(
                 height: 4,
                 width: 40,
@@ -88,6 +90,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
               ),
             ],
           ),
+        ),
+        ),
         );
       },
     );
@@ -138,6 +142,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
     final pad = Responsive.pad(context);
     final primaryText = Theme.of(context).textTheme.titleMedium?.color;
 
@@ -189,7 +194,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
                 Expanded(
                   child: GridView.count(
-                    crossAxisCount: 2,
+                    crossAxisCount: width > 700 ? 3 : 2,
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                     childAspectRatio: .60,

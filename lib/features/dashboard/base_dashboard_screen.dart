@@ -79,9 +79,10 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     if (_loading) return;
     setState(() => _loading = true);
 
-    final connectivity = await Connectivity().checkConnectivity();
+    final results = await Connectivity().checkConnectivity();
 
-    if (connectivity.contains(ConnectivityResult.none)) {
+    if (results.contains(ConnectivityResult.none)) {
+
       setState(() {
         _noInternet = true;
         _loading = false;
@@ -122,10 +123,10 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
   void _listenToConnectivity() {
     _connectivitySub =
-        Connectivity().onConnectivityChanged.listen((results) {
+      Connectivity().onConnectivityChanged.listen((results) {
 
-      final hasInternet =
-          !results.contains(ConnectivityResult.none);
+    final hasInternet = !results.contains(ConnectivityResult.none);
+
 
       if (hasInternet && _noInternet) {
         setState(() => _noInternet = false);

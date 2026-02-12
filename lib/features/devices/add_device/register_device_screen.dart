@@ -141,6 +141,12 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                           email: email,
                           loginType: loginType,
                           registeredAt: now,
+                          displayName: _nameController.text.trim(),
+                          department: _deptController.text.trim(),
+                          area: _areaController.text.trim().isEmpty
+                              ? "Unknown Area"
+                              : _areaController.text.trim(),
+                          pin: _pinController.text.trim(),
                         );
 
                         /// 1️⃣ SAVE LOCALLY (offline-safe)
@@ -161,14 +167,9 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                         setState(() => _loading = false);
 
                         /// 3️⃣ GO TO SAVED DEVICES
-                        Navigator.pushNamedAndRemoveUntil(
+                        Navigator.popUntil(
                           context,
-                          AppRoutes.dashboard,
-                          (route) => false,
-                          arguments: {
-                            "deviceId": deviceId,
-                            "equipmentType": equipmentType,
-                          },
+                          (route) => route.settings.name == AppRoutes.allDevices,
                         );
                       },
                 child: Text(

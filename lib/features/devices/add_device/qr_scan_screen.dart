@@ -30,6 +30,8 @@ class _QrScanScreenState extends State<QrScanScreen>
 
   bool _torchOn = false;
   bool _frontCamera = false;
+  bool _navigating = false;
+
 
   // ✅ pinch zoom
   double _baseZoom = 0.0;
@@ -99,11 +101,19 @@ class _QrScanScreenState extends State<QrScanScreen>
   void _goNext({
     required String equipmentType,
     required String deviceId,
-  }) {
-    if (_scanned) return;
+  }) async {
+
+    if (_navigating) return;   // HARD STOP
+    _navigating = true;
 
     setState(() => _scanned = true);
+
+    await _controller.stop();
+    await _controller.dispose();
+
     HapticFeedback.lightImpact();
+
+    if (!mounted) return;
 
     Navigator.pushNamed(
       context,
@@ -113,11 +123,6 @@ class _QrScanScreenState extends State<QrScanScreen>
         "equipmentType": equipmentType,
       },
     );
-
-    // optional: allow scanning again after coming back
-    Timer(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _scanned = false);
-    });
   }
 
   /// ✅ DEMO BUTTON: Instant deviceId = 5192
@@ -196,6 +201,7 @@ class _QrScanScreenState extends State<QrScanScreen>
 
   @override
   void dispose() {
+    _controller.stop();
     _controller.dispose();
     _scanLineController.dispose();
     super.dispose();
@@ -208,6 +214,7 @@ class _QrScanScreenState extends State<QrScanScreen>
 
     final equipmentType = (args?["equipmentType"] ?? "UNKNOWN").toString();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -276,7 +283,9 @@ class _QrScanScreenState extends State<QrScanScreen>
           /// ✅ GPay Overlay (rounded cutout + glow + scan line + corner borders)
           GPayScannerOverlay(
             scanLineAnimation: _scanLineController,
-            cutOutSize: 270,
+            cutOutSize: size.width < size.height
+            ? size.width * 0.7
+            : size.height * 0.5,
             borderRadius: 20,
           ),
 
@@ -287,24 +296,23 @@ class _QrScanScreenState extends State<QrScanScreen>
             right: 16,
             child: SafeArea(
               child: Row(
-                children: [
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   _TopActionButton(
                     icon: _torchOn ? Icons.flash_on : Icons.flash_off,
                     label: _torchOn ? "Flash On" : "Flash Off",
                     onTap: _toggleTorch,
                   ),
-                  const SizedBox(width: 12),
+                  const Expanded(child: SizedBox()),
                   _TopActionButton(
                     icon: Icons.cameraswitch_rounded,
                     label: _frontCamera ? "Front" : "Back",
                     onTap: _switchCamera,
                   ),
                   const Spacer(),
+
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(999),
@@ -313,6 +321,7 @@ class _QrScanScreenState extends State<QrScanScreen>
                       ),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(
                           Icons.zoom_in,

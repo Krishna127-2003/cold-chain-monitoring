@@ -5,57 +5,55 @@ import '../repository/device_repository.dart';
 import '../repository_impl/local_device_repository.dart';
 import '../api/user_info_api.dart';
 
-
 class DeviceSyncService {
   static final DeviceRepository _deviceRepo = LocalDeviceRepository();
 
-  /// Sync backend devices → local storage
+  /// 🔁 FULL backend → local resync (source of truth = backend)
   static Future<bool> syncFromBackend({
     required String email,
     required String loginType,
   }) async {
     try {
-      final backendDevices = await UserInfoApi.fetchByEmail(email);
+      print("🔄 Syncing devices for $email");
 
+      /// 1️⃣ Fetch devices from backend
+      /// 1️⃣ Fetch devices from backend
+      final backendDevices =
+          await UserInfoApi.fetchRegisteredDevices(email);
+
+      print("📥 Backend returned ${backendDevices.length} devices");
+
+      /// 2️⃣ If backend empty → DON'T wipe local cache
       if (backendDevices.isEmpty) {
-        print("ℹ️ No backend devices for $email");
+        print("⚠️ Backend empty — not clearing local data");
         return false;
       }
 
-      for (final device in backendDevices) {
-        print("📦 Backend row raw: $device");
+      /// 3️⃣ Clear local cache safely
+      await (_deviceRepo as LocalDeviceRepository).clearAllDevices();
 
-        // ✅ 1. Only accept DEVICE rows
-        if (device["type"] != "device_registration") {
-          print("⏭️ Skipping non-device row");
-          continue;
-        }
-
-        // ✅ 2. Guard against corrupt rows
-        final deviceId = device["deviceId"];
-        if (deviceId == null || deviceId.toString().isEmpty) {
-          print("⚠️ Skipping device with null deviceId");
-          continue;
-        }
-
-        final registeredDevice = RegisteredDevice(
-          deviceId: deviceId.toString(),
-          qrCode: device["qrCode"]?.toString() ?? deviceId.toString(),
-          productKey: device["productKey"]?.toString() ?? "SYNCED",
-          serviceType: device["serviceType"]?.toString() ?? "UNKNOWN",
+      /// 3️⃣ Save fresh backend data locally
+      for (final d in backendDevices) {
+        final device = RegisteredDevice(
+          deviceId: d["deviceId"].toString(),
+          qrCode: d["deviceId"].toString(),
+          productKey: d["productKey"]?.toString() ?? "SYNCED",
+          serviceType: d["serviceType"].toString(),
           email: email,
           loginType: loginType,
-          registeredAt: device["registeredAt"] != null
-              ? DateTime.parse(device["registeredAt"].toString())
-              : DateTime.now(),
+          registeredAt: DateTime.parse(d["registeredAt"]),
+          displayName: d["displayName"] ?? "Unnamed Device",
+          department: d["department"] ?? "Unknown Department",
+          area: d["area"] ?? "Unknown Area",
+          pin: d["pin"] ?? "0000",
         );
 
-        await _deviceRepo.registerDevice(registeredDevice);
+        await _deviceRepo.registerDevice(device);
       }
 
-
-      print("✅ Synced ${backendDevices.length} devices from backend");
+      print("✅ Local device cache rebuilt");
       return true;
+
     } catch (e) {
       print("❌ Device sync failed: $e");
       return false;

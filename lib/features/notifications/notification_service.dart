@@ -4,11 +4,17 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const settings = InitializationSettings(android: android);
+    const initializationSettings = InitializationSettings(
+      android: androidSettings,
+    );
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings: initializationSettings, // ✅ REQUIRED NOW
+      onDidReceiveNotificationResponse: (response) {},
+    );
   }
 
   static Future<void> send(String title, String body) async {
@@ -22,10 +28,10 @@ class NotificationService {
     const details = NotificationDetails(android: androidDetails);
 
     await _plugin.show(
-      0,
-      title,
-      body,
-      details,
+      id: 0,
+      title: title,
+      body: body,
+      notificationDetails: details,
     );
   }
 }

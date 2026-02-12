@@ -368,7 +368,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                 Navigator.pushNamed(
                   context,
                   AppRoutes.services,
-                );
+                ).then((_) {
+                  _loadDevices();   // 🔥 refresh when coming back
+                });
               },
               child: const Icon(Icons.add),
             ),
@@ -403,6 +405,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                   final deviceName = d.deviceId; // until you add a name field
                   final dept = "-";              // placeholder
                   final equipmentType = d.serviceType;
+
                   final status = _getSystemStatusForDevice(deviceId);
 
                   final selected = _selected.contains(deviceId);
@@ -494,6 +497,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                                                 AppRoutes.notificationSettings,
                                                 arguments: {
                                                   "deviceId": deviceId,
+                                                  "equipmentType": equipmentType,
                                                 },
                                               );
                                             },

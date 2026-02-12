@@ -65,4 +65,10 @@ class LocalDeviceRepository implements DeviceRepository {
 
     await prefs.setStringList(_key, list);
   }
+
+  Future<void> clearAllDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove("registered_devices");
+    print("🧹 Local device cache cleared");
+  }
 }
