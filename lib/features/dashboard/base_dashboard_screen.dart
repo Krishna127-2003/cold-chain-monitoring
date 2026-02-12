@@ -165,8 +165,6 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     final d = await AlertSettingsStorage.load();
     _settings = AlertSettings(
       app: d["app"],
-      email: d["email"],
-      sms: d["sms"],
       level: d["level"],
     );
   }

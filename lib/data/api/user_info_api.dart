@@ -105,6 +105,7 @@ class UserInfoApi {
 
         if (decoded is Map) {
           // backend still broken → wrap for safety
+          print("⚠️ Backend returned single row instead of full history");
           return [Map<String, dynamic>.from(decoded)];
         }
       } else {

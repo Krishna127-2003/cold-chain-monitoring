@@ -1,17 +1,11 @@
 Duration levelToDelay(int level) {
   switch (level) {
     case 0:
-      return Duration.zero; // instant
+      return Duration.zero;        // instant
     case 1:
-      return const Duration(hours: 1);
+      return const Duration(hours: 1); // 1 hour
     case 2:
-      return const Duration(hours: 2);
-    case 3:
-      return const Duration(hours: 4);
-    case 4:
-      return const Duration(hours: 12);
-    case 5:
-      return const Duration(hours: 24);
+      return const Duration(days: 365); // effectively never
     default:
       return const Duration(hours: 1);
   }

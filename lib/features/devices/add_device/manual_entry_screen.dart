@@ -12,7 +12,7 @@ class ManualEntryScreen extends StatefulWidget {
 class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
   final _controller = TextEditingController();
-  final bool _loading = false;
+  bool _loading = false;
 
   void _continue() {
     final value = _controller.text.trim();
@@ -37,9 +37,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
     final equipmentType = args["equipmentType"];
 
     return Scaffold(

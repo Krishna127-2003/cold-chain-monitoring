@@ -12,8 +12,6 @@ class NotificationSettingsScreen extends StatefulWidget {
 class _NotificationSettingsScreenState
     extends State<NotificationSettingsScreen> {
   bool appAlert = true;
-  bool emailAlert = true;
-  bool smsAlert = true;
   int selectedLevel = 1;
 
   @override
@@ -28,8 +26,6 @@ class _NotificationSettingsScreenState
 
     setState(() {
       appAlert = data["app"] ?? true;
-      emailAlert = data["email"] ?? true;
-      smsAlert = data["sms"] ?? true;
       selectedLevel = data["level"] ?? 1;
     });
   }
@@ -65,16 +61,6 @@ class _NotificationSettingsScreenState
               title: const Text("App"),
               onChanged: (v) => setState(() => appAlert = v ?? false),
             ),
-            CheckboxListTile(
-              value: emailAlert,
-              title: const Text("Email"),
-              onChanged: (v) => setState(() => emailAlert = v ?? false),
-            ),
-            CheckboxListTile(
-              value: smsAlert,
-              title: const Text("SMS"),
-              onChanged: (v) => setState(() => smsAlert = v ?? false),
-            ),
             const SizedBox(height: 20),
             const Text(
               "Alert Escalation Level",
@@ -89,12 +75,9 @@ class _NotificationSettingsScreenState
               },
               child: Column(
                 children: [
-                  levelOption(5, "Level 5 — after 24 hours"),
-                  levelOption(4, "Level 4 — after 12 hours"),
-                  levelOption(3, "Level 3 — after 4 hours"),
-                  levelOption(2, "Level 2 — after 2 hours"),
-                  levelOption(1, "Level 1 — after 1 hour"),
-                  levelOption(0, "Level 0 — instant"),
+                  levelOption(0, "Instant"),
+                  levelOption(1, "After 1 hour"),
+                  levelOption(2, "Never"),
                 ],
               ),
             ),
@@ -108,8 +91,6 @@ class _NotificationSettingsScreenState
 
                     await AlertSettingsStorage.save(
                       app: appAlert,
-                      email: emailAlert,
-                      sms: smsAlert,
                       level: selectedLevel,
                     );
 

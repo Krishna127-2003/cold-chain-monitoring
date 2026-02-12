@@ -34,4 +34,16 @@ class NotificationService {
       notificationDetails: details,
     );
   }
+
+  static Future<void> sendRepeated(
+    String title,
+    String body, {
+    int times = 5,
+    Duration gap = const Duration(seconds: 5),
+  }) async {
+    for (int i = 0; i < times; i++) {
+      await send(title, body);
+      await Future.delayed(gap);
+    }
+  }
 }

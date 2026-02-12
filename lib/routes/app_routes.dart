@@ -7,6 +7,7 @@ import '../features/devices/add_device/product_key_screen.dart';
 import '../features/devices/add_device/register_device_screen.dart';
 import '../features/devices/all_devices_screen.dart';
 import '../features/notifications/notification_settings_screen.dart';
+import '../features/devices/add_device/manual_entry_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -18,8 +19,7 @@ class AppRoutes {
   static const String registerDevice = '/register-device';
   static const String allDevices = '/all-devices';
   static const String notificationSettings = '/notification-settings';
-  static const manualEntry = "/manualEntry";   // ✅ NEW
-
+  static const String manualEntry = "/manualEntry"; 
 
   static Map<String, WidgetBuilder> get routes => {
         splash: (_) => const SplashScreen(),
@@ -30,6 +30,6 @@ class AppRoutes {
         registerDevice: (_) => const RegisterDeviceScreen(),
         allDevices: (_) => const AllDevicesScreen(),
         notificationSettings: (_) => const NotificationSettingsScreen(),
-        
+        manualEntry: (_) => const ManualEntryScreen(),   // ✅ NEW
       };
 }

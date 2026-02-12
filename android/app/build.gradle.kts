@@ -74,7 +74,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 }
@@ -85,5 +85,20 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
+
+afterEvaluate {
+    tasks.matching { it.name.contains("assembleDebug") }.configureEach {
+        doLast {
+            val fromDir = file("$buildDir/outputs/flutter-apk")
+            val toDir = file("${rootProject.projectDir}/build/app/outputs/flutter-apk")
+
+            if (fromDir.exists()) {
+                toDir.mkdirs()
+                fromDir.copyRecursively(toDir, overwrite = true)
+            }
+        }
+    }
+}
+

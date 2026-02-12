@@ -12,7 +12,9 @@ import '../../data/repository_impl/local_device_repository.dart';
 import '../../data/session/session_manager.dart';
 import '../../data/models/registered_device.dart';
 import '../dashboard/models/unified_telemetry.dart';
-
+import 'package:flutter_svg/flutter_svg.dart';
+import '../../data/api/account_deletion_api.dart';
+import '../../data/api/user_activity_api.dart';
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -233,8 +235,19 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
     // ✅ FIX: Delete globally (because AllDevicesScreen has devices from ALL equipment types)
     for (final id in _selected) {
-      await _deviceRepo.deleteDevice(id);
+    await _deviceRepo.deleteDevice(id);
+
+    final email = await SessionManager.getEmail();
+
+    if (email != null) {
+      await UserActivityApi.sendAction(
+        email: email,
+        action: "device_deleted",
+        deviceId: id,
+      );
     }
+  }
+
 
     // ✅ Exit edit mode and refresh
     setState(() {
@@ -270,10 +283,19 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   Future<void> _logout() async {
-    _hideSnackBar(); // 🔥 kill snackbar before leaving screen
+    _hideSnackBar();
+
+    final email = await SessionManager.getEmail();
+
+    if (email != null) {
+      await UserActivityApi.sendAction(
+        email: email,
+        action: "logout",
+      );
+    }
 
     await GoogleAuthService.signOut();
-    await SessionManager.logout(); // ✅ CLEAR SESSION
+    await SessionManager.logout();
 
     if (!mounted) return;
 
@@ -284,25 +306,89 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     );
   }
 
+  Future<void> _deleteAccountCompletely() async {
+    final email = await SessionManager.getEmail();
+
+    if (email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Email not found")),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete account permanently"),
+        content: const Text(
+          "This will delete all your data forever. This cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete forever"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success =
+        await AccountDeletionApi.sendPermanentDeleteCommand(email);
+    
+    if (success) {
+      await UserActivityApi.sendAction(
+        email: email,
+        action: "permanently_delete",
+      );
+    }
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Account deleted successfully")),
+      );
+
+      await _logout();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to delete account")),
+      );
+    }
+  }
+
   void _showLogoutConfirm(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Logout"),
-        content: const Text(
-          "Are you sure you want to logout?\nYou will need to sign in again.",
-        ),
+        title: const Text("Account options"),
+        content: const Text("Choose what you want to do"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text("Cancel"),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await _logout();
             },
             child: const Text("Logout"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _deleteAccountCompletely();
+            },
+            child: const Text("Logout & Delete Account"),
           ),
         ],
       ),
@@ -311,49 +397,58 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final padding = Responsive.pad(context);
+    //final padding = Responsive.pad(context);
     final devices = _devices;
 
     return Scaffold(
       appBar: AppBar(
-        title: _isEditMode
-            ? Text("${_selected.length} selected")
-            : const Text("Saved Devices"),
+        toolbarHeight: 56, // 👈 smaller than default 56
+        automaticallyImplyLeading: false,
+        elevation: 0, // cleaner look (optional)
+        centerTitle: true, // 🎯 This forces the title to the absolute center
+        title: Row(
+          children: [
+            // ⬅️ LEFT LOGO
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: SvgPicture.asset(
+                "assets/images/marken_logo.svg",
+                height: 34,
+              ),
+            ),
+            // The spacer ensures the logo doesn't "push" the title off-center
+            const Spacer(), 
+          ],
+        ),
+        // 🎯 Use the flexibleSpace or a separate Stack if you want the title 
+        // to ignore the width of the logo entirely:
         actions: [
-          // ✅ Edit mode button (only if devices exist)
           if (devices.isNotEmpty)
             IconButton(
               icon: Icon(_isEditMode ? Icons.close : Icons.edit),
-              tooltip: _isEditMode ? "Exit edit mode" : "Edit devices",
               onPressed: _toggleEditMode,
             ),
 
-          // ✅ Edit mode actions
           if (_isEditMode) ...[
             IconButton(
               icon: const Icon(Icons.select_all),
-              tooltip: "Select All",
               onPressed: () => _selectAll(devices),
             ),
             IconButton(
               icon: const Icon(Icons.clear_all),
-              tooltip: "Clear Selection",
               onPressed: _clearSelection,
             ),
             IconButton(
               icon: const Icon(Icons.delete),
-              tooltip: "Delete Selected",
               onPressed: _selected.isEmpty
                   ? null
                   : () => _deleteSelectedDevices(devices),
             ),
           ],
 
-          // ✅ Logout always available
           IconButton(
-            onPressed: () => _showLogoutConfirm(context),
             icon: const Icon(Icons.logout),
-            tooltip: "Logout",
+            onPressed: () => _showLogoutConfirm(context),
           ),
         ],
       ),
@@ -376,17 +471,39 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
             ),
 
       body: Padding(
-  padding: EdgeInsets.all(padding),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+        padding: EdgeInsets.only(
+          left: Responsive.pad(context),
+          right: Responsive.pad(context),
+          bottom: Responsive.pad(context),
+          top: 0, // 👈 tiny controlled space
+        ),
+        child: Column(
+
+    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
 
-      // 👋 WELCOME TEXT
-      Text(
-        "Welcome, $_welcomeName",
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w900,
+      // 🔥 HEADER aligned with logo
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Saved Devices",
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
             ),
+            const SizedBox(height: 2),
+            Text(
+              "Welcome, $_welcomeName",
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
       ),
 
       const SizedBox(height: 16),
@@ -594,8 +711,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
       ),
     ],
   ),
-    ),
-    );
+      ),
+    );  
   }
 
   Widget _emptyState(BuildContext context) {

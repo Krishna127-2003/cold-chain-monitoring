@@ -6,6 +6,7 @@ import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../auth/google_auth_service.dart';
 
+
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
 
@@ -80,10 +81,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   Navigator.pop(ctx);
                   Navigator.pushNamed(
                     context,
-                    AppRoutes.productKey,
+                    AppRoutes.manualEntry,
                     arguments: {
                       "equipmentType": equipmentType,
-                      "manualEntry": true, // ✅ future-proof flag
                     },
                   );
                 },

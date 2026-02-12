@@ -22,7 +22,7 @@ class AlertProcessor {
     if (!shouldFire) return;
 
     if (settings.app) {
-      await NotificationService.send(
+      await NotificationService.sendRepeated(
         "Cold Chain Alert",
         "Temperature exceeded safe range",
       );
