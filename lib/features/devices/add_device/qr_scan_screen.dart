@@ -102,20 +102,15 @@ class _QrScanScreenState extends State<QrScanScreen>
     required String equipmentType,
     required String deviceId,
   }) async {
-
-    if (_navigating) return;   // HARD STOP
+    if (_navigating) return;
     _navigating = true;
 
     setState(() => _scanned = true);
-
-    await _controller.stop();
-    await _controller.dispose();
-
     HapticFeedback.lightImpact();
 
     if (!mounted) return;
 
-    Navigator.pushNamed(
+    Navigator.pushReplacementNamed(
       context,
       AppRoutes.productKey,
       arguments: {
@@ -123,6 +118,12 @@ class _QrScanScreenState extends State<QrScanScreen>
         "equipmentType": equipmentType,
       },
     );
+
+    // 🧠 Let navigation finish first (prevents red flash)
+    await Future.delayed(const Duration(milliseconds: 80));
+
+    await _controller.stop();
+    await _controller.dispose();
   }
 
   /// ✅ DEMO BUTTON: Instant deviceId = 5192

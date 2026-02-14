@@ -15,10 +15,7 @@ import '../dashboard/models/unified_telemetry.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../data/api/account_deletion_api.dart';
 import '../../data/api/user_activity_api.dart';
-import 'package:provider/provider.dart';
-import '../../core/theme/theme_provider.dart';
 import '../devices/security/pin_verify_dialog.dart';
-
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -200,9 +197,11 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   String _normalizeDeviceId(String rawId) {
-    if (!rawId.contains("device_id=")) return rawId;
     final parsed = Uri.tryParse(rawId);
-    return parsed?.queryParameters["device_id"] ?? rawId;
+    if (parsed != null && parsed.queryParameters.containsKey("device_id")) {
+      return parsed.queryParameters["device_id"]!;
+    }
+    return rawId.trim();
   }
 
   Future<void> _deleteSelectedDevices(
@@ -210,7 +209,10 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   ) async {
     if (_selected.isEmpty) return;
 
-    final verified = await PinVerifyDialog.verify(context);
+    final verified = await PinVerifyDialog.verify(
+      context,
+      deviceId: _selected.first,
+    );
 
     if (!verified) return;
 
@@ -365,18 +367,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
             },
             child: const Text("Logout"),
           ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
-              side: BorderSide(color: Colors.grey.shade300),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _deleteAccountCompletely();
-            },
-            child: const Text("Logout & Delete Account"),
-          ),
         ],
       ),
     );
@@ -392,25 +382,16 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
         toolbarHeight: 56, // 👈 smaller than default 56
         automaticallyImplyLeading: false,
         elevation: 0, // cleaner look (optional)
-        centerTitle: true, // 🎯 This forces the title to the absolute center
-        title: Row(
-          children: [
-            // ⬅️ LEFT LOGO
-            Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: SvgPicture.asset(
-                "assets/images/marken_logo.svg",
-                height: 34,
-              ),
-            ),
-            // The spacer ensures the logo doesn't "push" the title off-center
-            const Spacer(),
-          ],
-        ),
+        // 🎯 This forces the title to the absolute center
+        title: SvgPicture.asset(
+            "assets/images/marken_logo.svg",
+            height: 34,
+          ),
+          centerTitle: false,
+
         // 🎯 Use the flexibleSpace or a separate Stack if you want the title
         // to ignore the width of the logo entirely:
         actions: [
-          const _ThemeMenuButton(),
           const SizedBox(width: 4),
           if (devices.isNotEmpty)
             IconButton(
@@ -841,44 +822,6 @@ class _StatusChip extends StatelessWidget {
         status,
         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: c),
       ),
-    );
-  }
-}
-
-
-class _ThemeMenuButton extends StatelessWidget {
-  const _ThemeMenuButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
-    IconData icon;
-    if (themeProvider.mode == ThemeMode.dark) {
-      icon = Icons.dark_mode;
-    } else if (themeProvider.mode == ThemeMode.light) {
-      icon = Icons.light_mode;
-    } else {
-      icon = Icons.brightness_auto;
-    }
-
-    return PopupMenuButton<String>(
-      tooltip: "Theme",
-      icon: Icon(icon),
-      onSelected: (value) {
-        if (value == "light") {
-          themeProvider.setTheme(ThemeMode.light);
-        } else if (value == "dark") {
-          themeProvider.setTheme(ThemeMode.dark);
-        } else {
-          themeProvider.setTheme(ThemeMode.system);
-        }
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: "system", child: Text("System Default")),
-        PopupMenuItem(value: "light", child: Text("Light Mode")),
-        PopupMenuItem(value: "dark", child: Text("Dark Mode")),
-      ],
     );
   }
 }

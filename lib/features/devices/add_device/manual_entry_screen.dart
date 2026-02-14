@@ -30,7 +30,6 @@ Future<void> _continue() async {
         AppRoutes.productKey,
         arguments: {
           "deviceId": value,
-          "qrCode": value,
           "equipmentType": (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>)["equipmentType"],
         },
       );
@@ -40,8 +39,8 @@ Future<void> _continue() async {
   }
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
-    final equipmentType = args["equipmentType"];
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final equipmentType = args?["equipmentType"] ?? "UNKNOWN";
 
     return Scaffold(
       appBar: AppBar(title: const Text("Enter Device Code")),

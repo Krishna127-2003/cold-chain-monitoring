@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'features/dashboard/device_dashboard_screen.dart';
 import 'core/theme/app_theme.dart';
-import 'core/theme/theme_provider.dart';
 import 'routes/app_routes.dart';
 import 'firebase_options.dart';
 import 'features/notifications/notification_service.dart';
@@ -19,17 +17,10 @@ Future<void> main() async {
     }
   } catch (_) {}
 
-  final themeProvider = ThemeProvider();
-  await themeProvider.loadTheme();
 
   await NotificationService.init();
 
-  runApp(
-    ChangeNotifierProvider.value(
-      value: themeProvider,
-      child: const ColdChainApp(),
-    ),
-  );
+  runApp(const ColdChainApp());
 }
 
 class ColdChainApp extends StatelessWidget {
@@ -37,7 +28,6 @@ class ColdChainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
 
     final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -46,9 +36,7 @@ class ColdChainApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MarkEn IoT',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: themeProvider.mode,
+      theme: AppTheme.theme,
       initialRoute: AppRoutes.splash,
       scaffoldMessengerKey: rootMessengerKey,
       routes: AppRoutes.routes,

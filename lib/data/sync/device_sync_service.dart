@@ -10,62 +10,77 @@ class DeviceSyncService {
 
   /// 🔁 Backend = source of truth
   static Future<bool> syncFromBackend({
-    required String email,
-    required String loginType,
-  }) async {
-    try {
-      print("🔄 Starting backend sync for $email");
+  required String email,
+  required String loginType,
+}) async {
+  try {
+    print("🔄 Syncing from backend for $email");
 
-      final backendRows =
-          await UserInfoApi.fetchRegisteredDevices(email);
-
-      if (backendRows.isEmpty) {
-        print("ℹ️ No backend devices found — keeping local cache");
-        return true; // valid state (user just has no devices yet)
-      }
-
-      /// ✅ Build unique devices by deviceId
-      final Map<String, Map<String, dynamic>> unique = {};
-
-      for (final row in backendRows) {
-        final id = row["deviceId"]?.toString();
-        if (id != null && id.isNotEmpty) {
-          unique[id] = row;
-        }
-      }
-
-      print("📦 Unique backend devices: ${unique.length}");
-
-      /// 🧹 Clear only this user's local devices
-      await (_deviceRepo as LocalDeviceRepository)
-          .clearDevicesForUser(email, loginType);
-
-      /// 💾 Rebuild local cache
-      for (final d in unique.values) {
-        final device = RegisteredDevice(
-          deviceId: d["deviceId"].toString(),
-          qrCode: d["deviceId"].toString(),
-          productKey: d["productKey"]?.toString() ?? "SYNCED",
-          serviceType: d["serviceType"].toString(),
-          email: email,
-          loginType: loginType,
-          registeredAt: DateTime.tryParse(d["registeredAt"] ?? "") ??
-              DateTime.now().toUtc(),
-          displayName: d["displayName"] ?? "Unnamed Device",
-          department: d["department"] ?? "Unknown Department",
-          area: d["area"] ?? "Unknown Area",
-          pin: d["pin"] ?? "0000",
-        );
-
-        await _deviceRepo.registerDevice(device);
-      }
-
-      print("✅ Backend sync complete");
+    final backendRows = await UserInfoApi.fetchRegisteredDevices(email);
+    if (backendRows.isEmpty) {
+      print("ℹ️ Backend empty — nothing to sync");
       return true;
-
-    } catch (e) {
-      print("❌ Sync failed: $e");
-      return false;
     }
+
+    final localDevices =
+        await (_deviceRepo as LocalDeviceRepository)
+            .getDevicesForUser(email, loginType);
+
+    final Map<String, RegisteredDevice> localMap = {
+      for (var d in localDevices) d.deviceId: d
+    };
+
+    for (final row in backendRows) {
+      final id = row["deviceId"]?.toString();
+      if (id == null || id.isEmpty) continue;
+
+      final existing = localMap[id];
+
+      final device = RegisteredDevice(
+        deviceId: id,
+        qrCode: id,
+        productKey: row["productKey"]?.toString() ??
+            existing?.productKey ?? "SYNCED",
+        serviceType: row["serviceType"]?.toString() ??
+            existing?.serviceType ?? "UNKNOWN",
+        email: email,
+        loginType: loginType,
+        registeredAt:
+            DateTime.tryParse(row["registeredAt"] ?? "") ??
+            existing?.registeredAt ??
+            DateTime.now().toUtc(),
+
+        displayName:
+            row["displayName"]?.toString().isNotEmpty == true
+                ? row["displayName"]
+                : existing?.displayName ?? "Unnamed Device",
+
+        department:
+            row["department"]?.toString().isNotEmpty == true
+                ? row["department"]
+                : existing?.department ?? "Unknown Department",
+
+        area:
+            row["area"]?.toString().isNotEmpty == true
+                ? row["area"]
+                : existing?.area ?? "Unknown Area",
+
+        pin:
+            row["pin"]?.toString().isNotEmpty == true
+                ? row["pin"]
+                : existing?.pin ?? "0000",
+      );
+
+      await _deviceRepo.registerDevice(device);
+    }
+
+    print("✅ Safe backend merge complete");
+    return true;
+
+  } catch (e) {
+    print("❌ Sync failed: $e");
+    return false;
   }
+}
+
 }

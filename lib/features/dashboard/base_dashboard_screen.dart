@@ -12,6 +12,8 @@ import '../notifications/alert_settings.dart';
 import '../notifications/alert_settings_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'models/unified_telemetry.dart';
+import '../../data/api/immediate_send_api.dart';
+
 
 class Pill {
   final String label;
@@ -43,7 +45,8 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
   UnifiedTelemetry? _telemetry;
   DateTime? _lastSync;
-  bool _loading = false;
+  bool _initialLoading = true;
+  bool _refreshing = false;
   bool _noInternet = false;
   DateTime? _lastManualRefresh;
   late AnimationController _refreshController;
@@ -62,7 +65,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   }
 
   bool get hasNoData =>
-    !_loading && _telemetry == null && !_noInternet;
+    !_initialLoading  && _telemetry == null && !_noInternet;
 
   String _timeAgo(DateTime t) {
     final d = DateTime.now().difference(t);
@@ -75,40 +78,45 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
   // ================= FETCH =================
 
-  Future<void> _fetch() async {
-    if (_loading) return;
-    setState(() => _loading = true);
+  Future<void> _fetch({bool isRefresh = false}) async {
+    if (_refreshing) return;
 
-    final results = await Connectivity().checkConnectivity();
-
-    if (results.contains(ConnectivityResult.none)) {
-
-      setState(() {
-        _noInternet = true;
-        _loading = false;
-      });
-      return;
+    if (isRefresh) {
+      _refreshing = true;
+    } else if (_telemetry == null) {
+      _initialLoading = true; // only first load shows CONNECTING
     }
 
-    _noInternet = false;
+    if (mounted) setState(() {});
 
-    final telemetry =
-        await AndroidDataApi.fetchByDeviceId(widget.deviceId);
+    try {
+      final telemetry = await AndroidDataApi
+          .fetchByDeviceId(widget.deviceId)
+          .timeout(const Duration(seconds: 6));
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _telemetry = telemetry;
-      _lastSync = telemetry?.timestamp;
-      _loading = false;
-    });
+      if (telemetry != null) {
+        _telemetry = telemetry;
+        _lastSync = telemetry.timestamp;
+      }
+
+      _noInternet = false;
+    } catch (e) {
+      _noInternet = true;
+    }
+
+    _initialLoading = false;
+    _refreshing = false;
+
+    if (mounted) setState(() {});
 
     if (_settings != null &&
-        telemetry?.pv != null &&
-        telemetry?.sv != null) {
+        _telemetry?.pv != null &&
+        _telemetry?.sv != null) {
       final fire = _alertEngine.shouldTrigger(
-        pv: telemetry!.pv!,
-        sv: telemetry.sv!,
+        pv: _telemetry!.pv!,
+        sv: _telemetry!.sv!,
         settings: _settings!,
       );
 
@@ -152,7 +160,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     if (_lastManualRefresh == null ||
         now.difference(_lastManualRefresh!).inSeconds >= 20) {
       _lastManualRefresh = now;
-      await _fetch();
+      await _fetch(isRefresh: true);
     } else {
       await Future.delayed(const Duration(milliseconds: 600));
     }
@@ -172,6 +180,9 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   @override
   void initState() {
     super.initState();
+
+    ImmediateSendApi.trigger(widget.deviceId); // one-time kick
+
     _refreshController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -179,7 +190,10 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     _loadAlertSettings();
     _fetch();
     _listenToConnectivity();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _fetch());
+    _timer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _fetch(isRefresh: true),
+    );
   }
 
   @override
@@ -276,7 +290,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final t = _telemetry;
-    final bool connecting = _loading;
+    final bool connecting = _initialLoading;
     final bool noData = hasNoData;
 
     if (_noInternet) {

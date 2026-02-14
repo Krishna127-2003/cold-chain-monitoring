@@ -4,11 +4,9 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/utils/responsive.dart';
-import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import 'google_auth_service.dart';
 import '../../data/session/session_manager.dart'; // ✅ NEW
@@ -184,7 +182,6 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   Widget build(BuildContext context) {
     final pad = Responsive.pad(context);
-    final themeProvider = context.watch<ThemeProvider>();
 
     final size = MediaQuery.of(context).size;
     final isSmall = size.height < 700;
@@ -511,18 +508,6 @@ class _AuthScreenState extends State<AuthScreen>
                           ),
                         ),
 
-                        
-                        // ✅ Theme toggle (Top Right like modern apps)
-                        Positioned(
-                          top: 6,
-                          right: 4,
-                          child: _ThemeMenuButton(
-                            currentMode: themeProvider.mode,
-                            onModeSelected: (mode) {
-                              themeProvider.setTheme(mode);
-                            },
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -537,102 +522,6 @@ class _AuthScreenState extends State<AuthScreen>
 }
 
 /// ✅ Theme Menu Button (System / Light / Dark)
-class _ThemeMenuButton extends StatelessWidget {
-  final ThemeMode currentMode;
-  final ValueChanged<ThemeMode> onModeSelected;
-
-  const _ThemeMenuButton({
-    required this.currentMode,
-    required this.onModeSelected,
-  });
-
-  IconData _iconForMode(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return Icons.light_mode_rounded;
-      case ThemeMode.dark:
-        return Icons.dark_mode_rounded;
-      case ThemeMode.system:
-      default:
-        return Icons.settings_suggest_rounded;
-    }
-  }
-
-  String _labelForMode(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return "Light";
-      case ThemeMode.dark:
-        return "Dark";
-      case ThemeMode.system:
-      default:
-        return "System";
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return PopupMenuButton<ThemeMode>(
-      tooltip: "Theme",
-      onSelected: onModeSelected,
-      itemBuilder: (_) => const [
-        PopupMenuItem(
-          value: ThemeMode.system,
-          child: Text("System"),
-        ),
-        PopupMenuItem(
-          value: ThemeMode.light,
-          child: Text("Light"),
-        ),
-        PopupMenuItem(
-          value: ThemeMode.dark,
-          child: Text("Dark"),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.10)
-              : Colors.black.withValues(alpha: 0.04),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.14)
-                : Colors.black.withValues(alpha: 0.08),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _iconForMode(currentMode),
-              size: 18,
-              color: isDark ? Colors.white70 : const Color(0xFF0F172A),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _labelForMode(currentMode),
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white70 : const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: isDark ? Colors.white54 : Colors.black54,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// ✅ Premium Button widget with loading animation
 class _AuthButton extends StatelessWidget {

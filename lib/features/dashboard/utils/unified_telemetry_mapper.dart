@@ -2,62 +2,62 @@
   import '../models/unified_telemetry.dart';
 
   class UnifiedTelemetryMapper {
-    static UnifiedTelemetry? fromApi(Map<String, dynamic> raw) {
-      final latest = raw["latest_v"];
-      if (latest == null || latest is! String) return null;
+  static bool bit(int v, int b) => ((v >> b) & 1) == 1;
 
-      final decoded = jsonDecode(latest);
-      final status = int.tryParse(decoded["status"]?.toString() ?? "0") ?? 0;
-      bool isSystemError = (status & (1 << 12)) != 0;
+  static UnifiedTelemetry? fromApi(Map<String, dynamic> raw) {
+    final latest = raw["latest_v"];
+    if (latest == null || latest is! String) return null;
 
+    final decoded = jsonDecode(latest);
 
-      double? d(v) => double.tryParse(v?.toString() ?? "");
-      int i(v) => int.tryParse(v?.toString() ?? "") ?? 0;
-      bool b(v) => v?.toString() == "1";
-      
+    final status = int.tryParse(decoded["status"]?.toString() ?? "0") ?? 0;
 
-      DateTime? parseTimestamp(String? raw) {
-        if (raw == null) return null;
+    double? d(v) => double.tryParse(v?.toString() ?? "");
+    int i(v) => int.tryParse(v?.toString() ?? "") ?? 0;
 
-        final parts = raw.split(' ');
-        final d = parts[0].split('/');
-        final t = parts[1].split(':');
+    DateTime? parseTimestamp(String? raw) {
+      if (raw == null) return null;
 
-        return DateTime(
-          int.parse(d[2]),
-          int.parse(d[1]),
-          int.parse(d[0]),
-          int.parse(t[0]),
-          int.parse(t[1]),
-          int.parse(t[2]),
-        );
-      }
+      final parts = raw.split(' ');
+      final d = parts[0].split('/');
+      final t = parts[1].split(':');
 
-
-      return UnifiedTelemetry(
-        deviceId: decoded["device_id"]?.toString() ?? "",
-        timestamp: parseTimestamp(decoded["timestamp"]),
-
-        pv: d(decoded["temp"]),
-        sv: d(decoded["setv"]),
-
-        powerOn: b(decoded["pwron"]),
-        battery: i(decoded["battery"]),
-
-        compressor1: b(decoded["compressor1"]),
-        compressor2: b(decoded["compressor2"]),
-        compressor: b(decoded["compressor"]),
-
-        heater: b(decoded["heater"]),
-        agitator: b(decoded["agitator"]),
-        defrost: b(decoded["defrost"]),
-
-        probeOk: b(decoded["probe"]),
-
-        alarm: decoded["ALARMS"]?.toString() ?? "NORMAL",
-        logTime: parseTimestamp(decoded["log_time"]),
-
-        systemHealthy: !isSystemError,
+      return DateTime(
+        int.parse(d[2]),
+        int.parse(d[1]),
+        int.parse(d[0]),
+        int.parse(t[0]),
+        int.parse(t[1]),
+        int.parse(t[2]),
       );
     }
+
+    return UnifiedTelemetry(
+      deviceId: decoded["device_id"]?.toString() ?? "",
+      timestamp: parseTimestamp(decoded["timestamp"]),
+
+      pv: d(decoded["temp"]),
+      sv: d(decoded["setv"]),
+
+      powerOn: bit(status, 7),
+      battery: i(decoded["battery"]),
+
+      compressor: bit(status, 0),
+      compressor1: bit(status, 0), // same for now
+      compressor2: false,          // future expansion
+
+      heater: bit(status, 1),
+      agitator: false,             // only some devices use it
+      defrost: false,
+
+      probeOk: !bit(status, 3),
+
+      alarm: decoded["ALARMS"]?.toString() ?? "NORMAL",
+
+      logTime: parseTimestamp(decoded["log_time"]),
+
+      // 🔥 REAL SYSTEM HEALTH
+      systemHealthy: !bit(status, 12),
+    );
   }
+}

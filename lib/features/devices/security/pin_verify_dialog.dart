@@ -3,7 +3,10 @@ import '../../../data/api/user_info_api.dart';
 import '../../../data/session/session_manager.dart';
 
 class PinVerifyDialog {
-  static Future<bool> verify(BuildContext context) async {
+  static Future<bool> verify(
+      BuildContext context, {
+      required String deviceId,
+    }) async {
     final controller = TextEditingController();
     bool loading = false;
 
@@ -73,8 +76,9 @@ class PinVerifyDialog {
                               if (!ctx.mounted) return;
 
                               final pinRow = rows.firstWhere(
-                                (r) => r["type"] == "device_registration" &&
-                                    r["pin"] != null,
+                                (r) =>
+                                    r["type"] == "device_registration" &&
+                                    r["deviceId"] == deviceId,
                                 orElse: () => {},
                               );
 

@@ -1,5 +1,4 @@
 // ignore_for_file: avoid_print
-
 import 'package:http/http.dart' as http;
 
 class ImmediateSendApi {
@@ -7,15 +6,14 @@ class ImmediateSendApi {
   static const String _baseUrl =
       "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/ImmediateSend";
 
-  static Future<void> trigger({
-    required int interval,
-    required String deviceId,
-  }) async {
+  static Future<void> trigger(String deviceId) async {
 
-    final url = Uri.parse("$_baseUrl?interval=$interval&device_id=$deviceId");
+    final url = Uri.parse(_baseUrl).replace(queryParameters: {
+      "device_id": deviceId,
+    });
 
     try {
-      final res = await http.get(url);
+      final res = await http.get(url).timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
         print("⚡ Live data triggered for device $deviceId");

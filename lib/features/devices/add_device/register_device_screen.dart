@@ -153,16 +153,20 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                         await _deviceRepo.registerDevice(device);
 
                         /// 2️⃣ SEND REGISTRATION CALLBACK TO AZURE
-                        await UserInfoApi.postData({
-                          "type": "device_registration",
-                          "email": email,
-                          "loginType": loginType,
-                          "deviceId": deviceId,
-                          "qrCode": deviceId,
-                          "productKey": productKey,
-                          "serviceType": equipmentType,
-                          "registeredAt": now.toIso8601String(),
-                        });
+                        await UserInfoApi.sendDeviceRegistration(
+                          email: email,
+                          loginType: loginType,
+                          deviceId: deviceId,
+                          qrCode: deviceId,
+                          productKey: productKey,
+                          serviceType: equipmentType,
+                          displayName: _nameController.text.trim(),
+                          department: _deptController.text.trim(),
+                          area: _areaController.text.trim().isEmpty
+                              ? "Unknown Area"
+                              : _areaController.text.trim(),
+                          pin: _pinController.text.trim(),
+                        );
                         
                         setState(() => _loading = false);
 

@@ -93,4 +93,14 @@ class LocalDeviceRepository implements DeviceRepository {
       await deleteDevice(d.deviceId);
     }
   }
+
+  Future<List<RegisteredDevice>> getDevicesForUser(
+    String email,
+    String loginType,
+  ) {
+    return getRegisteredDevices(
+      email: email,
+      loginType: loginType,
+    );
+  }
 }
