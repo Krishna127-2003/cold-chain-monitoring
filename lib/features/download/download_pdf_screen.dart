@@ -4,10 +4,7 @@ import '../../data/api/pdf_download_api.dart';
 class DownloadPdfScreen extends StatefulWidget {
   final String deviceId;
 
-  const DownloadPdfScreen({
-    super.key,
-    required this.deviceId,
-  });
+  const DownloadPdfScreen({super.key, required this.deviceId});
 
   @override
   State<DownloadPdfScreen> createState() => _DownloadPdfScreenState();
@@ -38,9 +35,9 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
 
   Future<void> _pickEndDate() async {
     if (_startDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select start date first")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Select start date first")));
       return;
     }
 
@@ -61,8 +58,14 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       appBar: AppBar(
-        title: const Text("Download Data Log"),
         backgroundColor: const Color(0xFF0A1020),
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+        ),
+        title: const Text("Download Data Log"),
       ),
       body: Padding(
         padding: const EdgeInsets.all(18),
@@ -80,8 +83,10 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
               onTap: _pickStartDate,
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
@@ -94,9 +99,7 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
                       style: TextStyle(color: Colors.white70),
                     ),
                     Text(
-                      _startDate == null
-                          ? "--"
-                          : _format(_startDate!),
+                      _startDate == null ? "--" : _format(_startDate!),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -112,7 +115,10 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
               onTap: _pickEndDate,
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
@@ -138,7 +144,7 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
 
             const SizedBox(height: 30),
 
-            ElevatedButton.icon(
+            OutlinedButton.icon(
               onPressed: () async {
                 if (_startDate == null || _endDate == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -155,9 +161,11 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
               },
               icon: const Icon(Icons.download),
               label: const Text("Download PDF"),
-              style: ElevatedButton.styleFrom(
+              style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: const Color(0xFF2563EB),
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black87,
+                side: BorderSide(color: Colors.grey.shade300),
               ),
             ),
           ],

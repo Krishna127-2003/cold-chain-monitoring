@@ -8,32 +8,40 @@ import '../api/user_info_api.dart';
 class DeviceSyncService {
   static final DeviceRepository _deviceRepo = LocalDeviceRepository();
 
-  /// 🔁 FULL backend → local resync (source of truth = backend)
+  /// 🔁 Backend = source of truth
   static Future<bool> syncFromBackend({
     required String email,
     required String loginType,
   }) async {
     try {
-      print("🔄 Syncing devices for $email");
+      print("🔄 Starting backend sync for $email");
 
-      /// 1️⃣ Fetch devices from backend
-      /// 1️⃣ Fetch devices from backend
-      final backendDevices =
+      final backendRows =
           await UserInfoApi.fetchRegisteredDevices(email);
 
-      print("📥 Backend returned ${backendDevices.length} devices");
-
-      /// 2️⃣ If backend empty → DON'T wipe local cache
-      if (backendDevices.isEmpty) {
-        print("⚠️ Backend empty — not clearing local data");
-        return false;
+      if (backendRows.isEmpty) {
+        print("ℹ️ No backend devices found — keeping local cache");
+        return true; // valid state (user just has no devices yet)
       }
 
-      /// 3️⃣ Clear local cache safely
-      await (_deviceRepo as LocalDeviceRepository).clearAllDevices();
+      /// ✅ Build unique devices by deviceId
+      final Map<String, Map<String, dynamic>> unique = {};
 
-      /// 3️⃣ Save fresh backend data locally
-      for (final d in backendDevices) {
+      for (final row in backendRows) {
+        final id = row["deviceId"]?.toString();
+        if (id != null && id.isNotEmpty) {
+          unique[id] = row;
+        }
+      }
+
+      print("📦 Unique backend devices: ${unique.length}");
+
+      /// 🧹 Clear only this user's local devices
+      await (_deviceRepo as LocalDeviceRepository)
+          .clearDevicesForUser(email, loginType);
+
+      /// 💾 Rebuild local cache
+      for (final d in unique.values) {
         final device = RegisteredDevice(
           deviceId: d["deviceId"].toString(),
           qrCode: d["deviceId"].toString(),
@@ -41,7 +49,8 @@ class DeviceSyncService {
           serviceType: d["serviceType"].toString(),
           email: email,
           loginType: loginType,
-          registeredAt: DateTime.parse(d["registeredAt"]),
+          registeredAt: DateTime.tryParse(d["registeredAt"] ?? "") ??
+              DateTime.now().toUtc(),
           displayName: d["displayName"] ?? "Unnamed Device",
           department: d["department"] ?? "Unknown Department",
           area: d["area"] ?? "Unknown Area",
@@ -51,11 +60,11 @@ class DeviceSyncService {
         await _deviceRepo.registerDevice(device);
       }
 
-      print("✅ Local device cache rebuilt");
+      print("✅ Backend sync complete");
       return true;
 
     } catch (e) {
-      print("❌ Device sync failed: $e");
+      print("❌ Sync failed: $e");
       return false;
     }
   }

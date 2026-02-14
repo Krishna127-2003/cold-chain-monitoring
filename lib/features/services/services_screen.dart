@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/utils/responsive.dart';
-import '../../core/theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../auth/google_auth_service.dart';
 
@@ -152,8 +150,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
           appBar: AppBar(
             title: const Text("Services"),
             actions: [
-              const _ThemeMenuButton(),
-              const SizedBox(width: 4),
               PopupMenuButton<String>(
                 tooltip: "Account",
                 icon: Icon(Icons.more_vert, color: primaryText),
@@ -247,43 +243,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 }
 
 /* ---------------- THEME BUTTON & CARD ---------------- */
-
-class _ThemeMenuButton extends StatelessWidget {
-  const _ThemeMenuButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
-    IconData icon;
-    if (themeProvider.mode == ThemeMode.dark) {
-      icon = Icons.dark_mode;
-    } else if (themeProvider.mode == ThemeMode.light) {
-      icon = Icons.light_mode;
-    } else {
-      icon = Icons.brightness_auto;
-    }
-
-    return PopupMenuButton<String>(
-      tooltip: "Theme",
-      icon: Icon(icon),
-      onSelected: (value) {
-        if (value == "light") {
-          themeProvider.setTheme(ThemeMode.light);
-        } else if (value == "dark") {
-          themeProvider.setTheme(ThemeMode.dark);
-        } else {
-          themeProvider.setTheme(ThemeMode.system);
-        }
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: "system", child: Text("System Default")),
-        PopupMenuItem(value: "light", child: Text("Light Mode")),
-        PopupMenuItem(value: "dark", child: Text("Dark Mode")),
-      ],
-    );
-  }
-}
 
 class _ServiceCard extends StatelessWidget {
   final String title;

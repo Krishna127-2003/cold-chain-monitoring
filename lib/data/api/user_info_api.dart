@@ -61,6 +61,10 @@ class UserInfoApi {
     required String qrCode,
     required String productKey,
     required String serviceType,
+    required String displayName,
+    required String department,
+    required String area,
+    required String pin,
   }) {
     return postData({
       "type": "device_registration",
@@ -70,6 +74,11 @@ class UserInfoApi {
       "qrCode": qrCode,
       "productKey": productKey,
       "serviceType": serviceType,
+      //🔥 USER INPUT DATA (Task 14 fix)
+      "displayName": displayName,
+      "department": department,
+      "area": area,
+      "pin": pin,
     });
   }
 
@@ -91,26 +100,27 @@ class UserInfoApi {
   // (login + devices + future events)
   // ============================
   static Future<List<Map<String, dynamic>>> fetchByEmail(String email) async {
-    final uri = Uri.parse("$_baseUrl?email=$email");
+    final uri = Uri.parse(_baseUrl).replace(
+      queryParameters: {"email": email},
+    );
 
     try {
-      final res = await http.get(uri);
+      final res = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 8));
 
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body);
+      if (res.statusCode != 200) return [];
 
-        if (decoded is List) {
-          return List<Map<String, dynamic>>.from(decoded);
-        }
+      final decoded = jsonDecode(res.body);
 
-        if (decoded is Map) {
-          // backend still broken → wrap for safety
-          print("⚠️ Backend returned single row instead of full history");
-          return [Map<String, dynamic>.from(decoded)];
-        }
-      } else {
-        print("⚠️ userinfo GET failed: ${res.statusCode}");
+      if (decoded is List) {
+        return List<Map<String, dynamic>>.from(decoded);
       }
+
+      if (decoded is Map) {
+        return [Map<String, dynamic>.from(decoded)];
+      }
+
     } catch (e) {
       print("❌ userinfo GET error: $e");
     }
@@ -121,42 +131,36 @@ class UserInfoApi {
   // ============================
 // 📥 FETCH ONLY REGISTERED DEVICES
 // ============================
-  static Future<List<Map<String, dynamic>>> fetchRegisteredDevices(
+ static Future<List<Map<String, dynamic>>> fetchRegisteredDevices(
       String email) async {
-    final uri = Uri.parse("$_baseUrl?email=$email");
+
+    final uri = Uri.parse(_baseUrl).replace(
+      queryParameters: {"email": email},
+    );
 
     try {
-      final res = await http.get(uri);
+      final res = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 8));
 
-      if (res.statusCode != 200) {
-        print("⚠️ Device fetch failed: ${res.statusCode}");
-        return [];
-      }
+      if (res.statusCode != 200) return [];
 
       final decoded = jsonDecode(res.body);
 
-      List<Map<String, dynamic>> rows = [];
+      final rows = decoded is List
+          ? List<Map<String, dynamic>>.from(decoded)
+          : [Map<String, dynamic>.from(decoded)];
 
-      if (decoded is List) {
-        rows = List<Map<String, dynamic>>.from(decoded);
-      } else if (decoded is Map) {
-        rows = [Map<String, dynamic>.from(decoded)];
-      }
-
-      // 🔥 FILTER ONLY device_registration rows
-      final devices = rows.where((row) {
-        return row["type"] == "device_registration";
-      }).toList();
-
-      print("📦 Found ${devices.length} registered devices for $email");
-
-      return devices;
+      return rows
+          .where((r) => r["type"] == "device_registration")
+          .toList();
 
     } catch (e) {
       print("❌ fetchRegisteredDevices error: $e");
       return [];
     }
   }
+
   static Future<bool> doesUserExist(String email) async {
     final rows = await fetchByEmail(email);
     return rows.isNotEmpty;

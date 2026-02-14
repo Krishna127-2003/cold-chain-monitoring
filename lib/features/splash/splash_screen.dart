@@ -7,6 +7,8 @@ import '../../routes/app_routes.dart';
 import '../../data/session/session_manager.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
+import '../../data/sync/device_sync_service.dart';
+
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -93,7 +95,10 @@ class _SplashScreenState extends State<SplashScreen>
     if (loginType == "google" && email != null) {
       print("🔄 Silent backend sync started");
 
-      
+      await DeviceSyncService.syncFromBackend(
+        email: email,
+        loginType: loginType,
+      );
 
       final localDevices = await _deviceRepo.getRegisteredDevices(
         email: email,

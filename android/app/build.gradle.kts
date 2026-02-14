@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 import java.io.FileInputStream
 
 plugins {
@@ -9,7 +9,7 @@ plugins {
 }
 
 /**
- * 🔐 Load keystore properties
+ * ðŸ” Load keystore properties
  */
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -20,7 +20,8 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.marken.coldchain"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.0.13004108"
+
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -30,17 +31,16 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-    }
+    }   
 
     defaultConfig {
         applicationId = "com.marken.coldchain"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
 
-        // 🔼 CHANGE THIS EVERY RELEASE
-        versionCode = 14
-        versionName = "1.20.0"
-
+        // ðŸ”¼ CHANGE THIS EVERY RELEASE
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
         multiDexEnabled = true
 
         ndk {
@@ -71,12 +71,6 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
 }
 
 flutter {
@@ -101,4 +95,6 @@ afterEvaluate {
         }
     }
 }
+
+
 

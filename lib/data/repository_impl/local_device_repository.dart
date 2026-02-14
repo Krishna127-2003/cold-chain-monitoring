@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/registered_device.dart';
 import '../repository/device_repository.dart';
+import '../api/user_activity_api.dart';
+import '../session/session_manager.dart';
 
 class LocalDeviceRepository implements DeviceRepository {
   static const _key = "registered_devices";
@@ -13,6 +15,15 @@ class LocalDeviceRepository implements DeviceRepository {
   Future<bool> registerDevice(RegisteredDevice device) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_key) ?? [];
+    final email = await SessionManager.getEmail();
+
+    if (email != null) {
+      await UserActivityApi.sendAction(
+        email: email,
+        action: "device_added",
+        deviceId: device.deviceId,
+      );
+    }
 
     // ✅ REMOVE duplicate deviceId (important)
     list.removeWhere((e) {
@@ -24,7 +35,7 @@ class LocalDeviceRepository implements DeviceRepository {
     await prefs.setStringList(_key, list);
 
     print("💾 DEVICE SAVED: ${device.deviceId}");
-    return true;
+    return true;    
   }
 
   @override
@@ -70,5 +81,16 @@ class LocalDeviceRepository implements DeviceRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("registered_devices");
     print("🧹 Local device cache cleared");
+  }
+
+  Future<void> clearDevicesForUser(String email, String loginType) async {
+    final devices = await getRegisteredDevices(
+      email: email,
+      loginType: loginType,
+    );
+
+    for (final d in devices) {
+      await deleteDevice(d.deviceId);
+    }
   }
 }

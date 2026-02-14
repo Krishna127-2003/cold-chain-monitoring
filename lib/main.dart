@@ -45,7 +45,7 @@ class ColdChainApp extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Cold Chain Monitor',
+      title: 'MarkEn IoT',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeProvider.mode,
@@ -69,3 +69,4 @@ class ColdChainApp extends StatelessWidget {
     );
   }
 }
+

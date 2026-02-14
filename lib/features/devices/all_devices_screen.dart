@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+﻿// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -15,17 +15,19 @@ import '../dashboard/models/unified_telemetry.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../data/api/account_deletion_api.dart';
 import '../../data/api/user_activity_api.dart';
+import 'package:provider/provider.dart';
+import '../../core/theme/theme_provider.dart';
+import '../devices/security/pin_verify_dialog.dart';
+
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
 
   @override
   State<AllDevicesScreen> createState() => _AllDevicesScreenState();
-  
 }
 
 class _AllDevicesScreenState extends State<AllDevicesScreen> {
-
   final DeviceRepository _deviceRepo = LocalDeviceRepository();
   List<RegisteredDevice> _devices = [];
   bool _loadingDevices = true;
@@ -39,15 +41,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   /// ✅ FIX A) Prevent multiple redirects loop
   Timer? _tempTimer;
   final Map<String, UnifiedTelemetry> _telemetryByDevice = {};
-  bool _loadingTemps = false;
+  final Set<String> _loadingTempDeviceIds = {};
 
   bool isDeviceOnline(String deviceId) {
     final t = _telemetryByDevice[deviceId];
     if (t?.timestamp == null) return false;
 
-    return DateTime.now()
-        .difference(t!.timestamp!)
-        .inMinutes <= 5;
+    return DateTime.now().difference(t!.timestamp!).inMinutes <= 5;
   }
 
   bool hasNoData(String deviceId) {
@@ -89,7 +89,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   void initState() {
     super.initState();
 
-    _loadWelcomeUser();   // 👈 ADD THIS
+    _loadWelcomeUser(); // 👈 ADD THIS
     _loadDevices(); // 👈 ADD THIS
 
     // ✅ refresh every 60 seconds when saved devices screen is open
@@ -159,27 +159,32 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   Future<void> _loadTemps() async {
     if (!mounted || _devices.isEmpty) return;
 
-    setState(() => _loadingTemps = true);
+    final ids = _devices
+        .map((d) => _normalizeDeviceId(d.deviceId))
+        .where((id) => id.isNotEmpty)
+        .toSet();
 
-    for (final d in _devices) {
-      final rawId = d.deviceId;
+    if (ids.isEmpty) return;
 
-      final deviceId = rawId.contains("device_id=")
-          ? Uri.parse(rawId).queryParameters["device_id"]
-          : rawId;
+    setState(() {
+      _loadingTempDeviceIds
+        ..clear()
+        ..addAll(ids);
+    });
 
-      if (deviceId == null) continue;
+    await Future.wait(
+      ids.map((deviceId) async {
+        final telemetry = await AndroidDataApi.fetchByDeviceId(deviceId);
+        if (!mounted) return;
 
-      final telemetry = await AndroidDataApi.fetchByDeviceId(deviceId);
-
-      if (!mounted) return;
-
-      if (telemetry != null) {
-        _telemetryByDevice[deviceId] = telemetry;
-      }
-    }
-
-    setState(() => _loadingTemps = false);
+        setState(() {
+          _loadingTempDeviceIds.remove(deviceId);
+          if (telemetry != null) {
+            _telemetryByDevice[deviceId] = telemetry;
+          }
+        });
+      }),
+    );
   }
 
   String _getSystemStatusForDevice(String deviceId) {
@@ -194,29 +199,10 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     return t!.pv!.toStringAsFixed(1);
   }
 
-  Future<bool> _confirmDelete(BuildContext context, int count) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Delete device(s)?"),
-        content: Text(
-          "You are about to delete $count device(s) from Saved Devices.\n\nYou can UNDO immediately after deleting.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
-    );
-
-    return result ?? false;
+  String _normalizeDeviceId(String rawId) {
+    if (!rawId.contains("device_id=")) return rawId;
+    final parsed = Uri.tryParse(rawId);
+    return parsed?.queryParameters["device_id"] ?? rawId;
   }
 
   Future<void> _deleteSelectedDevices(
@@ -224,36 +210,33 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   ) async {
     if (_selected.isEmpty) return;
 
-    final ok = await _confirmDelete(context, _selected.length);
-    if (!ok) return;
+    final verified = await PinVerifyDialog.verify(context);
+
+    if (!verified) return;
 
     // ✅ Backup deleted devices for Undo
     final deletedBackup = currentDevices
-      .where((d) => _selected.contains(d.deviceId))
-      .toList();
-
+        .where((d) => _selected.contains(d.deviceId))
+        .toList();
 
     // ✅ FIX: Delete globally (because AllDevicesScreen has devices from ALL equipment types)
     for (final id in _selected) {
-    await _deviceRepo.deleteDevice(id);
+      await _deviceRepo.deleteDevice(id);
 
-    final email = await SessionManager.getEmail();
+      final email = await SessionManager.getEmail();
 
-    if (email != null) {
-      await UserActivityApi.sendAction(
-        email: email,
-        action: "device_deleted",
-        deviceId: id,
-      );
+      if (email != null) {
+        await UserActivityApi.sendAction(
+          email: email,
+          action: "device_deleted",
+          deviceId: id,
+        );
+      }
     }
-  }
-
 
     // ✅ Exit edit mode and refresh
     setState(() {
-      _devices.removeWhere(
-        (d) => _selected.contains(d.deviceId),
-      );
+      _devices.removeWhere((d) => _selected.contains(d.deviceId));
       _isEditMode = false;
       _selected.clear();
     });
@@ -288,10 +271,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     final email = await SessionManager.getEmail();
 
     if (email != null) {
-      await UserActivityApi.sendAction(
-        email: email,
-        action: "logout",
-      );
+      await UserActivityApi.sendAction(email: email, action: "logout");
     }
 
     await GoogleAuthService.signOut();
@@ -310,9 +290,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
     final email = await SessionManager.getEmail();
 
     if (email == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Email not found")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Email not found")));
       return;
     }
 
@@ -328,8 +308,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text("Cancel"),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
+              side: BorderSide(color: Colors.grey.shade300),
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text("Delete forever"),
           ),
@@ -339,9 +323,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
     if (confirm != true) return;
 
-    final success =
-        await AccountDeletionApi.sendPermanentDeleteCommand(email);
-    
+    final success = await AccountDeletionApi.sendPermanentDeleteCommand(email);
+
     if (success) {
       await UserActivityApi.sendAction(
         email: email,
@@ -358,9 +341,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
       await _logout();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to delete account")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Failed to delete account")));
     }
   }
 
@@ -382,8 +365,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
             },
             child: const Text("Logout"),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
+              side: BorderSide(color: Colors.grey.shade300),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               await _deleteAccountCompletely();
@@ -417,12 +404,14 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
               ),
             ),
             // The spacer ensures the logo doesn't "push" the title off-center
-            const Spacer(), 
+            const Spacer(),
           ],
         ),
-        // 🎯 Use the flexibleSpace or a separate Stack if you want the title 
+        // 🎯 Use the flexibleSpace or a separate Stack if you want the title
         // to ignore the width of the logo entirely:
         actions: [
+          const _ThemeMenuButton(),
+          const SizedBox(width: 4),
           if (devices.isNotEmpty)
             IconButton(
               icon: Icon(_isEditMode ? Icons.close : Icons.edit),
@@ -460,11 +449,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
               onPressed: () {
                 _hideSnackBar(); // ✅ kill snackbar
 
-                Navigator.pushNamed(
-                  context,
-                  AppRoutes.services,
-                ).then((_) {
-                  _loadDevices();   // 🔥 refresh when coming back
+                Navigator.pushNamed(context, AppRoutes.services).then((_) {
+                  _loadDevices(); // 🔥 refresh when coming back
                 });
               },
               child: const Icon(Icons.add),
@@ -478,241 +464,296 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
           top: 0, // 👈 tiny controlled space
         ),
         child: Column(
-
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-
-      // 🔥 HEADER aligned with logo
-      Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              "Saved Devices",
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
+            // 🔥 HEADER aligned with logo
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Saved Devices",
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              "Welcome, $_welcomeName",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 2),
+                  Text(
+                    "Welcome, $_welcomeName",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
 
-      const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-      Expanded(
-        child: _loadingDevices
-            ? const Center(child: CircularProgressIndicator())
-            : devices.isEmpty
-                ? _emptyState(context)
-                : ListView.builder(
-                itemCount: devices.length,
-                itemBuilder: (context, index) {
-                  final d = devices[index];
+            Expanded(
+              child: _loadingDevices
+                  ? const Center(child: CircularProgressIndicator())
+                  : devices.isEmpty
+                  ? _emptyState(context)
+                  : ListView.builder(
+                      itemCount: devices.length,
+                      itemBuilder: (context, index) {
+                        final d = devices[index];
 
-                  final deviceId = d.deviceId;
-                  final deviceName = d.deviceId; // until you add a name field
-                  final dept = "-";              // placeholder
-                  final equipmentType = d.serviceType;
+                        final storedDeviceId = d.deviceId;
+                        final deviceId = _normalizeDeviceId(storedDeviceId);
+                        final deviceName =
+                            d.displayName; // ✅ from register screen
+                        final dept = d.department; // ✅ from register screen
+                        final equipmentType = d.serviceType;
 
-                  final status = _getSystemStatusForDevice(deviceId);
+                        final status = _getSystemStatusForDevice(deviceId);
 
-                  final selected = _selected.contains(deviceId);
+                        final selected = _selected.contains(storedDeviceId);
 
-                  // ✅ ONLY REQUIRED ADDITION: live temp read
-                  final liveTemp = _getTempForDevice(deviceId);
-                  final telemetry = _telemetryByDevice[deviceId];
+                        final liveTemp = _getTempForDevice(deviceId);
+                        final telemetry = _telemetryByDevice[deviceId];
+                        final isLoadingThisDevice = _loadingTempDeviceIds
+                            .contains(deviceId);
 
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () {
+                              if (_isEditMode) {
+                                _toggleSelection(storedDeviceId);
+                              } else {
+                                _hideSnackBar(); // ✅ kill snackbar on screen change
 
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () {
-                        if (_isEditMode) {
-                          _toggleSelection(deviceId);
-                        } else {
-                          _hideSnackBar(); // ✅ kill snackbar on screen change
-
-                          Navigator.pushNamed(
-                            context,
-                            AppRoutes.dashboard,
-                            arguments: {
-                              "deviceId": deviceId,
-                              "equipmentType": equipmentType,
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.dashboard,
+                                  arguments: {
+                                    "deviceId": deviceId,
+                                    "equipmentType": equipmentType,
+                                  },
+                                );
+                              }
                             },
-                          );
-                        }
-                      },
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_isEditMode) ...[
-                                Checkbox(
-                                  value: selected,
-                                  onChanged: (_) => _toggleSelection(deviceId),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Container(
-                                height: 46,
-                                width: 46,
-                                  decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: 0.12),
-                                ),
-                                child: Icon(
-                                  _iconForType(equipmentType),
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            deviceName,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        if (!_isEditMode)
-                                          _StatusChip(status: status),
-
-                                          if (!_isEditMode) ...[
-                                          const SizedBox(width: 6),
-
-                                          IconButton(
-                                            icon: const Icon(Icons.notifications_active_outlined),
-                                            tooltip: "Notification settings",
-                                            onPressed: () {
-                                              Navigator.pushNamed(
-                                                context,
-                                                AppRoutes.notificationSettings,
-                                                arguments: {
-                                                  "deviceId": deviceId,
-                                                  "equipmentType": equipmentType,
-                                                },
-                                              );
-                                            },
-                                          ),
-                                        ]
-                                      ],
+                                    if (_isEditMode) ...[
+                                      Checkbox(
+                                        value: selected,
+                                        onChanged: (_) =>
+                                            _toggleSelection(storedDeviceId),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    Container(
+                                      height: 46,
+                                      width: 46,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(14),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.12),
+                                      ),
+                                      child: Icon(
+                                        _iconForType(equipmentType),
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      "$equipmentType • $dept",
-                                      style: Theme.of(context).textTheme.bodyMedium,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          "Device ID: $deviceId",
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: Theme.of(context).textTheme.bodySmall?.color,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-
-                                        const SizedBox(width: 8),
-
-                                        if (!_loadingTemps && telemetry != null)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: isDeviceOnline(deviceId)
-                                                  ? Colors.green.withValues(alpha: 0.15)
-                                                  : Colors.red.withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(999),
-                                              border: Border.all(
-                                                color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.circle,
-                                                  size: 7,
-                                                  color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  deviceId,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.titleMedium,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  isDeviceOnline(deviceId) ? "Online" : "Offline",
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isDeviceOnline(deviceId) ? Colors.green : Colors.red,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              if (!_isEditMode)
+                                                _StatusChip(status: status),
+
+                                              if (!_isEditMode) ...[
+                                                const SizedBox(width: 6),
+
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons
+                                                        .notifications_active_outlined,
                                                   ),
+                                                  tooltip:
+                                                      "Notification settings",
+                                                  onPressed: () {
+                                                    Navigator.pushNamed(
+                                                      context,
+                                                      AppRoutes
+                                                          .notificationSettings,
+                                                      arguments: {
+                                                        "deviceId": deviceId,
+                                                        "equipmentType":
+                                                            equipmentType,
+                                                      },
+                                                    );
+                                                  },
                                                 ),
                                               ],
-                                            ),
+                                            ],
                                           ),
-                                      ],
-                                    ),
+                                          const SizedBox(height: 6),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "$deviceName • $dept",
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodyMedium,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
 
-                                    // ✅ ONLY REQUIRED ADDITION: TEMP LINE
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _loadingTemps
-                                          ? "Temp: loading..."
-                                          : telemetry == null
-                                              ? "No data available"
-                                              : "Temp: ${liveTemp!} °C",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                            color: telemetry == null
-                                              ? Theme.of(context).disabledColor
-                                              : Theme.of(context).colorScheme.primary,
+                                              const SizedBox(height: 4),
+
+                                              Text(
+                                                equipmentType.replaceAll(
+                                                  "_",
+                                                  " ",
+                                                ),
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
+                                            ],
                                           ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              // ✅ ONLY REQUIRED ADDITION: TEMP LINE
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                (isLoadingThisDevice &&
+                                                        telemetry == null)
+                                                    ? "Temp: loading..."
+                                                    : telemetry == null
+                                                    ? "No data available"
+                                                    : "Temp: ${liveTemp!} °C",
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: telemetry == null
+                                                          ? Theme.of(
+                                                              context,
+                                                            ).disabledColor
+                                                          : Theme.of(context)
+                                                                .colorScheme
+                                                                .primary,
+                                                    ),
+                                              ),
+                                              const SizedBox(width: 8),
+
+                                              if (telemetry != null)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        isDeviceOnline(deviceId)
+                                                        ? Colors.green
+                                                              .withValues(
+                                                                alpha: 0.15,
+                                                              )
+                                                        : Colors.red.withValues(
+                                                            alpha: 0.15,
+                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          999,
+                                                        ),
+                                                    border: Border.all(
+                                                      color:
+                                                          isDeviceOnline(
+                                                            deviceId,
+                                                          )
+                                                          ? Colors.green
+                                                          : Colors.red,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.circle,
+                                                        size: 7,
+                                                        color:
+                                                            isDeviceOnline(
+                                                              deviceId,
+                                                            )
+                                                            ? Colors.green
+                                                            : Colors.red,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        isDeviceOnline(deviceId)
+                                                            ? "Online"
+                                                            : "Offline",
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color:
+                                                              isDeviceOnline(
+                                                                deviceId,
+                                                              )
+                                                              ? Colors.green
+                                                              : Colors.red,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+            ),
+          ],
+        ),
       ),
-    ],
-  ),
-      ),
-    );  
+    );
   }
 
   Widget _emptyState(BuildContext context) {
@@ -728,7 +769,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                 width: 56,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.12),
                 ),
                 child: Icon(
                   Icons.devices,
@@ -783,7 +826,6 @@ class _StatusChip extends StatelessWidget {
     return Colors.green;
   }
 
-
   @override
   Widget build(BuildContext context) {
     final c = _color(status);
@@ -797,12 +839,46 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         status,
-        style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w800,
-          color: c,
-        ),
+        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: c),
       ),
+    );
+  }
+}
+
+
+class _ThemeMenuButton extends StatelessWidget {
+  const _ThemeMenuButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    IconData icon;
+    if (themeProvider.mode == ThemeMode.dark) {
+      icon = Icons.dark_mode;
+    } else if (themeProvider.mode == ThemeMode.light) {
+      icon = Icons.light_mode;
+    } else {
+      icon = Icons.brightness_auto;
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: "Theme",
+      icon: Icon(icon),
+      onSelected: (value) {
+        if (value == "light") {
+          themeProvider.setTheme(ThemeMode.light);
+        } else if (value == "dark") {
+          themeProvider.setTheme(ThemeMode.dark);
+        } else {
+          themeProvider.setTheme(ThemeMode.system);
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: "system", child: Text("System Default")),
+        PopupMenuItem(value: "light", child: Text("Light Mode")),
+        PopupMenuItem(value: "dark", child: Text("Dark Mode")),
+      ],
     );
   }
 }

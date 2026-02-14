@@ -14,27 +14,30 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   final _controller = TextEditingController();
   bool _loading = false;
 
-  void _continue() {
-    final value = _controller.text.trim();
-
-    if (value.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter device code")),
-      );
-      return;
-    }
-
-    Navigator.pushNamed(
-      context,
-      AppRoutes.productKey,
-      arguments: {
-        "deviceId": value,
-        "qrCode": value,
-        "equipmentType": ModalRoute.of(context)!.settings.arguments,
-      },
+Future<void> _continue() async {
+  final value = _controller.text.trim();
+  if (value.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please enter device code")),
     );
+    return;
+  }/*  */
+  
+  setState(() => _loading = true);
+    try {
+      await Navigator.pushNamed(
+        context,
+        AppRoutes.productKey,
+        arguments: {
+          "deviceId": value,
+          "qrCode": value,
+          "equipmentType": (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>)["equipmentType"],
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
-
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
@@ -69,3 +72,4 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 }
+
