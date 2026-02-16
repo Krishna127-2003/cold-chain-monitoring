@@ -74,6 +74,8 @@ class _AuthScreenState extends State<AuthScreen>
     final prefs = await SharedPreferences.getInstance();
     final savedVersion = prefs.getString("accepted_policy_version");
 
+    if (!mounted) return;
+
     if (savedVersion == AuthScreen.policyVersion) {
       setState(() => acceptedPolicy = true);
     }
@@ -140,9 +142,9 @@ class _AuthScreenState extends State<AuthScreen>
       loginType: "google",
     );
 
-    setState(() => _loadingGoogle = false);
-
     if (!mounted) return;
+
+    setState(() => _loadingGoogle = false);
 
     /// ✅ 5. NAVIGATE CORRECTLY
     Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
@@ -173,6 +175,8 @@ class _AuthScreenState extends State<AuthScreen>
 
      /// ✅ SAVE GUEST SESSION
     await SessionManager.saveLogin(loginType: "guest");
+
+    if (!mounted) return;
 
     setState(() => _loadingGuest = false);
 
@@ -667,3 +671,4 @@ class _GlowBlob extends StatelessWidget {
     );
   }
 }
+

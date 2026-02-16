@@ -31,6 +31,9 @@ class AndroidDataApi {
 
       final raw = jsonDecode(response.body);
 
+      debugPrint("RAW API RESPONSE = $raw");
+      debugPrint("latest_v TYPE = ${raw["latest_v"].runtimeType}");
+
       // 🎯 Convert once only
       final telemetry = UnifiedTelemetryMapper.fromApi(raw);
 

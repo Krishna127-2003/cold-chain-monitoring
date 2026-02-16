@@ -192,8 +192,12 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     _listenToConnectivity();
     _timer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _fetch(isRefresh: true),
-    );
+      (_) async {
+        await ImmediateSendApi.trigger(widget.deviceId);
+        await _fetch(isRefresh: true);
+  },
+);
+
   }
 
   @override

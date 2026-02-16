@@ -197,12 +197,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   String _normalizeDeviceId(String rawId) {
-    final parsed = Uri.tryParse(rawId);
-    if (parsed != null && parsed.queryParameters.containsKey("device_id")) {
-      return parsed.queryParameters["device_id"]!;
-    }
     return rawId.trim();
   }
+
 
   Future<void> _deleteSelectedDevices(
     List<RegisteredDevice> currentDevices,
@@ -431,6 +428,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                 _hideSnackBar(); // ✅ kill snackbar
 
                 Navigator.pushNamed(context, AppRoutes.services).then((_) {
+                  if (!mounted) return;
                   _loadDevices(); // 🔥 refresh when coming back
                 });
               },

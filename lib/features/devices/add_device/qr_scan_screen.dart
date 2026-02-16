@@ -11,6 +11,8 @@ import '../../../routes/app_routes.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart'
     as mlkit;
 
+import '../../dashboard/utils/device_id_helper.dart';
+
 
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
@@ -123,7 +125,6 @@ class _QrScanScreenState extends State<QrScanScreen>
     await Future.delayed(const Duration(milliseconds: 80));
 
     await _controller.stop();
-    await _controller.dispose();
   }
 
   /// ✅ DEMO BUTTON: Instant deviceId = 5192
@@ -264,7 +265,7 @@ class _QrScanScreenState extends State<QrScanScreen>
                 final rawValue = barcodes.first.rawValue;
                 if (rawValue == null || rawValue.isEmpty) return;
 
-                final deviceId = _extractDeviceId(rawValue);
+                final deviceId = DeviceIdHelper.normalize(rawValue);
 
                 if (deviceId == null) {
                   ScaffoldMessenger.of(context).showSnackBar(

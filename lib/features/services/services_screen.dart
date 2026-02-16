@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/utils/responsive.dart';
 import '../../routes/app_routes.dart';
 import '../auth/google_auth_service.dart';
+import '../../data/session/session_manager.dart';
 
 
 class ServicesScreen extends StatefulWidget {
@@ -128,6 +129,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
     try {
       await GoogleAuthService.signOut();
     } catch (_) {}
+
+    await SessionManager.logout();
 
     if (!mounted) return;
 
