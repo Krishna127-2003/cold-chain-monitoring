@@ -1,23 +1,36 @@
-// ignore_for_file: avoid_print
-
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SessionManager {
   static const _keyLoggedIn = "is_logged_in";
   static const _keyLoginType = "login_type";
   static const _keyEmail = "email";
-
   static const String _lastSyncPrefix = "last_sync_";
+  static const FlutterSecureStorage _secure = FlutterSecureStorage();
 
-  static Future<void> saveLastSync(
-    String deviceId,
-    DateTime time,
-  ) async {
+  static Future<String?> _readSecureWithPrefsFallback(String key) async {
+    final secureValue = await _secure.read(key: key);
+    if (secureValue != null) return secureValue;
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      "$_lastSyncPrefix$deviceId",
-      time.toIso8601String(),
-    );
+    if (key == _keyLoggedIn) {
+      final v = prefs.getBool(_keyLoggedIn);
+      if (v == null) return null;
+      final migrated = v ? "true" : "false";
+      await _secure.write(key: _keyLoggedIn, value: migrated);
+      return migrated;
+    }
+
+    final legacy = prefs.getString(key);
+    if (legacy != null) {
+      await _secure.write(key: key, value: legacy);
+    }
+    return legacy;
+  }
+
+  static Future<void> saveLastSync(String deviceId, DateTime time) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString("$_lastSyncPrefix$deviceId", time.toIso8601String());
   }
 
   static Future<DateTime?> getLastSync(String deviceId) async {
@@ -27,52 +40,48 @@ class SessionManager {
     return DateTime.tryParse(value);
   }
 
-
-  /// ✅ Save login session
   static Future<void> saveLogin({
     required String loginType,
     String? email,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+
+    await _secure.write(key: _keyLoggedIn, value: "true");
+    await _secure.write(key: _keyLoginType, value: loginType.trim());
     await prefs.setBool(_keyLoggedIn, true);
     await prefs.setString(_keyLoginType, loginType.trim());
 
     if (email != null && email.trim().isNotEmpty) {
-      await prefs.setString(_keyEmail, email.trim());
+      final e = email.trim();
+      await _secure.write(key: _keyEmail, value: e);
+      await prefs.setString(_keyEmail, e);
     } else {
-      await prefs.remove(_keyEmail); // ✅ important for guest
+      await _secure.delete(key: _keyEmail);
+      await prefs.remove(_keyEmail);
     }
-
-    print("💾 Session SAVED: type='$loginType', email='$email'");
   }
 
-  /// ✅ FIXED: Guest OR Google = logged in
   static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    final loggedIn = prefs.getBool(_keyLoggedIn) ?? false;
-    final type = prefs.getString(_keyLoginType)?.trim();
-
-    final valid = loggedIn && type != null && type.isNotEmpty;
-
-    print("🔍 isLoggedIn(): loggedIn=$loggedIn, type=$type, valid=$valid");
-    return valid;
+    final loggedIn = (await _readSecureWithPrefsFallback(_keyLoggedIn)) == "true";
+    final type = (await _readSecureWithPrefsFallback(_keyLoginType))?.trim();
+    return loggedIn && type != null && type.isNotEmpty;
   }
 
   static Future<String?> getLoginType() async {
-    final prefs = await SharedPreferences.getInstance();
-    final type = prefs.getString(_keyLoginType)?.trim();
+    final type = (await _readSecureWithPrefsFallback(_keyLoginType))?.trim();
     return type?.isNotEmpty == true ? type : null;
   }
 
   static Future<String?> getEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString(_keyEmail)?.trim();
+    final email = (await _readSecureWithPrefsFallback(_keyEmail))?.trim();
     return email?.isNotEmpty == true ? email : null;
   }
 
-  /// ✅ Logout
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+    await _secure.delete(key: _keyLoggedIn);
+    await _secure.delete(key: _keyLoginType);
+    await _secure.delete(key: _keyEmail);
     await prefs.remove(_keyLoggedIn);
     await prefs.remove(_keyLoginType);
     await prefs.remove(_keyEmail);

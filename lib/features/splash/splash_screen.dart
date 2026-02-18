@@ -3,12 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../routes/app_routes.dart';
-import '../../data/session/session_manager.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
+import '../../data/session/session_manager.dart';
 import '../../data/sync/device_sync_service.dart';
-
+import '../../routes/app_routes.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -45,86 +44,70 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _decideNext() async {
-    await Future.delayed(const Duration(milliseconds: 4600));
+    try {
+      await Future.delayed(const Duration(milliseconds: 4600));
 
-    if (!mounted || _navigated) return;
-    _navigated = true;
+      if (!mounted || _navigated) return;
+      _navigated = true;
 
-    final loggedIn = await SessionManager.isLoggedIn();
+      final loggedIn = await SessionManager.isLoggedIn();
 
-    if (!loggedIn) {
-      print("➡️ Splash → Auth");
-      _go(AppRoutes.auth);
-      return;
-    }
+      if (!loggedIn) {
+        _go(AppRoutes.auth);
+        return;
+      }
 
-    final loginType = await SessionManager.getLoginType();
-    final email = await SessionManager.getEmail();
+      final loginType = await SessionManager.getLoginType();
+      final email = await SessionManager.getEmail();
 
-    if (loginType == null) {
-      print("❌ Invalid session → Auth");
+      if (loginType == null) {
+        await SessionManager.logout();
+        _go(AppRoutes.auth);
+        return;
+      }
+
+      if (loginType == 'guest') {
+        final localDevices = await _deviceRepo.getRegisteredDevices(
+          email: '',
+          loginType: 'guest',
+        );
+
+        if (!mounted) return;
+        _go(AppRoutes.allDevices);
+        if (localDevices.isNotEmpty) {
+          // Keep existing behavior (route unchanged), useful log retained.
+          print('Guest devices found: ${localDevices.length}');
+        }
+        return;
+      }
+
+      if (loginType == 'google' && email != null) {
+        await DeviceSyncService.syncFromBackend(
+          email: email,
+          loginType: loginType,
+        );
+
+        final localDevices = await _deviceRepo.getRegisteredDevices(
+          email: email,
+          loginType: loginType,
+        );
+
+        if (!mounted) return;
+        _go(AppRoutes.allDevices);
+        if (localDevices.isNotEmpty) {
+          print('Google devices found: ${localDevices.length}');
+        }
+        return;
+      }
+
       await SessionManager.logout();
       _go(AppRoutes.auth);
-      return;
-    }
-
-    // -------------------------
-    // 👤 GUEST USER
-    // -------------------------
-    if (loginType == "guest") {
-      final localDevices = await _deviceRepo.getRegisteredDevices(
-        email: "", // REQUIRED by interface
-        loginType: "guest",
-      );
-
+    } catch (_) {
       if (!mounted) return;
-
-      if (localDevices.isEmpty) {
-        print("➡️ Guest → allDevices");
-        _go(AppRoutes.allDevices);
-      } else {
-        print("➡️ Guest → AllDevices (${localDevices.length})");
-        _go(AppRoutes.allDevices);
-      }
-      return;
+      await SessionManager.logout();
+      _go(AppRoutes.auth);
     }
-
-    // -------------------------
-    // 🔐 GOOGLE USER
-    // -------------------------
-    if (loginType == "google" && email != null) {
-      print("🔄 Silent backend sync started");
-
-      await DeviceSyncService.syncFromBackend(
-        email: email,
-        loginType: loginType,
-      );
-
-      final localDevices = await _deviceRepo.getRegisteredDevices(
-        email: email,
-        loginType: loginType,
-      );
-
-      if (!mounted) return;
-
-      if (localDevices.isEmpty) {
-        print("➡️ Google → allDevices");
-        _go(AppRoutes.allDevices);
-      } else {
-        print("➡️ Google → AllDevices (${localDevices.length})");
-        _go(AppRoutes.allDevices);
-      }
-      return;
-    }
-
-    // -------------------------
-    // FALLBACK
-    // -------------------------
-    print("⚠️ Unknown state → Auth");
-    await SessionManager.logout();
-    _go(AppRoutes.auth);
   }
-
 
   void _go(String route) {
     if (!mounted) return;
@@ -166,7 +149,7 @@ class _SplashScreenState extends State<SplashScreen>
           child: Center(
             child: _revealFromLeft(
               child: SvgPicture.asset(
-                "assets/images/marken_logo.svg",
+                'assets/images/marken_logo.svg',
                 height: logoHeight,
               ),
             ),

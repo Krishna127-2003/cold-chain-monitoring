@@ -13,6 +13,7 @@ class DownloadPdfScreen extends StatefulWidget {
 class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _downloading = false;
 
   String _format(DateTime d) {
     return "${d.day.toString().padLeft(2, '0')}/"
@@ -28,8 +29,14 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
       lastDate: DateTime.now(),
     );
 
+    if (!mounted) return;
     if (picked != null) {
-      setState(() => _startDate = picked);
+      setState(() {
+        _startDate = picked;
+        if (_endDate != null && _endDate!.isBefore(picked)) {
+          _endDate = null;
+        }
+      });
     }
   }
 
@@ -48,6 +55,7 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
       lastDate: DateTime.now(),
     );
 
+    if (!mounted) return;
     if (picked != null) {
       setState(() => _endDate = picked);
     }
@@ -145,7 +153,9 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
             const SizedBox(height: 30),
 
             OutlinedButton.icon(
-              onPressed: () async {
+              onPressed: _downloading
+                  ? null
+                  : () async {
                 if (_startDate == null || _endDate == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Select both dates")),
@@ -153,14 +163,34 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
                   return;
                 }
 
-                await PdfDownloadApi.downloadPdf(
-                  deviceId: widget.deviceId,
-                  startDate: _startDate!,
-                  endDate: _endDate!,
-                );
+                setState(() => _downloading = true);
+                try {
+                  await PdfDownloadApi.downloadPdf(
+                    deviceId: widget.deviceId,
+                    startDate: _startDate!,
+                    endDate: _endDate!,
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Failed to open PDF download link"),
+                    ),
+                  );
+                } finally {
+                  if (mounted) {
+                    setState(() => _downloading = false);
+                  }
+                }
               },
-              icon: const Icon(Icons.download),
-              label: const Text("Download PDF"),
+              icon: _downloading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download),
+              label: Text(_downloading ? "Preparing..." : "Download PDF"),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 backgroundColor: Colors.white,

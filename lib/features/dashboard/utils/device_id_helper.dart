@@ -15,7 +15,6 @@ class DeviceIdHelper {
     if (RegExp(r'^\d+$').hasMatch(value)) {
       return value;
     }
-
     return null; // invalid input
   }
 }

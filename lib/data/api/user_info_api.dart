@@ -1,45 +1,51 @@
-// ignore_for_file: avoid_print
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../storage/secure_store.dart';
 
 class UserInfoApi {
   static const String _baseUrl =
       "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/userinfo";
 
-  // ============================
-  // 🔹 GENERIC POST
-  // Used for:
-  // - login
-  // - device_registration
-  // - permanent_delete (future)
-  // ============================
-  static Future<bool> postData(Map<String, dynamic> payload) async {
-    try {
-      final res = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          ...payload,
-          "timestamp": DateTime.now().toUtc().toIso8601String(),
-        }),
-      );
+  static final SecureStore _secureStore = SecureStore();
 
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        print("✅ userinfo POST success → ${payload["type"] ?? "login"}");
-        return true;
-      } else {
-        print("⚠️ userinfo POST failed: ${res.statusCode} ${res.body}");
-      }
-    } catch (e) {
-      print("❌ userinfo POST error: $e");
+  // ================= HEADERS =================
+
+  static Future<Map<String, String>> _jsonHeaders() async {
+    final headers = <String, String>{
+      "Content-Type": "application/json",
+    };
+
+    final token = await _secureStore.getToken();
+    if (token != null && token.trim().isNotEmpty) {
+      headers["Authorization"] = "Bearer ${token.trim()}";
     }
-    return false;
+
+    return headers;
   }
 
-  // ============================
-  // 🔐 LOGIN EVENT
-  // ============================
+  // ================= BASE POST =================
+
+  static Future<bool> postData(Map<String, dynamic> payload) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse(_baseUrl),
+            headers: await _jsonHeaders(),
+            body: jsonEncode({
+              ...payload,
+              "timestamp": DateTime.now().toUtc().toIso8601String(),
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ================= LOGIN =================
+
   static Future<bool> sendUserLogin({
     required String email,
     required String loginType,
@@ -51,9 +57,8 @@ class UserInfoApi {
     });
   }
 
-  // ============================
-  // 📦 DEVICE REGISTRATION EVENT
-  // ============================
+  // ================= DEVICE REGISTER =================
+
   static Future<bool> sendDeviceRegistration({
     required String email,
     required String loginType,
@@ -64,27 +69,36 @@ class UserInfoApi {
     required String displayName,
     required String department,
     required String area,
-    required String pin,
+    required String pinHash,
+
+    // ✅ SERIAL + OPERATION MODE
+    required int deviceNumber,
+    required String modeOp,
   }) {
     return postData({
       "type": "device_registration",
+
       "email": email,
       "loginType": loginType,
+
       "deviceId": deviceId,
       "qrCode": qrCode,
       "productKey": productKey,
       "serviceType": serviceType,
-      //🔥 USER INPUT DATA (Task 14 fix)
+
       "displayName": displayName,
       "department": department,
       "area": area,
-      "pin": pin,
+      "pinHash": pinHash.trim(),
+
+      // ✅ NEW FIELDS (Task 14 correct)
+      "deviceNumber": deviceNumber,
+      "modeOp": modeOp,
     });
   }
 
-  // ============================
-  // 🧨 PERMANENT DELETE (future)
-  // ============================
+  // ================= ACCOUNT DELETE =================
+
   static Future<bool> sendPermanentDelete({
     required String email,
   }) {
@@ -95,10 +109,8 @@ class UserInfoApi {
     });
   }
 
-  // ============================
-  // 📥 READ ALL USER ROWS
-  // (login + devices + future events)
-  // ============================
+  // ================= FETCH =================
+
   static Future<List<Map<String, dynamic>>> fetchByEmail(String email) async {
     final uri = Uri.parse(_baseUrl).replace(
       queryParameters: {"email": email},
@@ -106,7 +118,10 @@ class UserInfoApi {
 
     try {
       final res = await http
-          .get(uri)
+          .get(
+            uri,
+            headers: await _jsonHeaders(),
+          )
           .timeout(const Duration(seconds: 8));
 
       if (res.statusCode != 200) return [];
@@ -114,52 +129,29 @@ class UserInfoApi {
       final decoded = jsonDecode(res.body);
 
       if (decoded is List) {
-        return List<Map<String, dynamic>>.from(decoded);
+        return decoded
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
 
       if (decoded is Map) {
         return [Map<String, dynamic>.from(decoded)];
       }
-
-    } catch (e) {
-      print("❌ userinfo GET error: $e");
-    }
+    } catch (_) {}
 
     return [];
   }
 
-  // ============================
-// 📥 FETCH ONLY REGISTERED DEVICES
-// ============================
- static Future<List<Map<String, dynamic>>> fetchRegisteredDevices(
-      String email) async {
+  static Future<List<Map<String, dynamic>>> fetchRegisteredDevices(
+    String email,
+  ) async {
+    final rows = await fetchByEmail(email);
 
-    final uri = Uri.parse(_baseUrl).replace(
-      queryParameters: {"email": email},
-    );
-
-    try {
-      final res = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 8));
-
-      if (res.statusCode != 200) return [];
-
-      final decoded = jsonDecode(res.body);
-
-      final rows = decoded is List
-          ? List<Map<String, dynamic>>.from(decoded)
-          : [Map<String, dynamic>.from(decoded)];
-
-      return rows
-          .where((r) => r["type"] == "device_registration")
-          .toList();
-
-    } catch (e) {
-      print("❌ fetchRegisteredDevices error: $e");
-      return [];
-    }
+    return rows.where((r) => r["type"] == "device_registration").toList();
   }
+
+  // ================= EXISTS =================
 
   static Future<bool> doesUserExist(String email) async {
     final rows = await fetchByEmail(email);

@@ -1,5 +1,3 @@
-// ignore_for_file: use_build_context_synchronously
-
 import 'package:flutter/material.dart';
 import '../../../routes/app_routes.dart';
 
@@ -29,46 +27,45 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
       context,
       AppRoutes.registerDevice,
       arguments: {
-        "deviceId": deviceId,
-        "equipmentType": equipmentType,
-        "productKey": productKey, // ✅ PASS IT FOR STORAGE
+        'deviceId': deviceId,
+        'equipmentType': equipmentType,
+        'productKey': productKey,
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
     final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        rawArgs is Map<String, dynamic> ? rawArgs : const <String, dynamic>{};
 
-    final deviceId = (args?["deviceId"] ?? "UNKNOWN").toString();
-    final equipmentType = (args?["equipmentType"] ?? "UNKNOWN").toString();
+    final deviceId = (args['deviceId'] ?? 'UNKNOWN').toString();
+    final equipmentType = (args['equipmentType'] ?? 'UNKNOWN').toString();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Enter Product Key")),
+      appBar: AppBar(title: const Text('Enter Product Key')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
-              "Device ID: $deviceId",
+              'Device ID: $deviceId',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 14),
 
-            /// ✅ Product Key Input
             TextField(
               controller: _keyController,
               textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
-                labelText: "Product Key",
-                hintText: "XXXX-XXXX",
+                labelText: 'Product Key',
+                hintText: 'XXXX-XXXX',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 14),
 
-            /// ✅ Verify Button
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -81,7 +78,7 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
                         if (key.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Enter product key"),
+                              content: Text('Enter product key'),
                             ),
                           );
                           return;
@@ -89,47 +86,54 @@ class _ProductKeyScreenState extends State<ProductKeyScreen> {
 
                         setState(() => _loading = true);
 
-                        // 🔄 MOCK verification (replace with Azure later)
-                        await Future.delayed(const Duration(milliseconds: 700));
+                        try {
+                          // MOCK verification (replace with backend call later)
+                          await Future.delayed(
+                            const Duration(milliseconds: 700),
+                          );
 
-                        setState(() => _loading = false);
-
-                        _goNext(
-                          deviceId: deviceId,
-                          equipmentType: equipmentType,
-                          productKey: key,
-                        );
+                          if (!mounted) return;
+                          _goNext(
+                            deviceId: deviceId,
+                            equipmentType: equipmentType,
+                            productKey: key,
+                          );
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Product key verification failed'),
+                            ),
+                          );
+                        } finally {
+                          if (mounted) {
+                            setState(() => _loading = false);
+                          }
+                        }
                       },
-                child: Text(_loading ? "Verifying..." : "Verify Product Key"),
+                child: Text(_loading ? 'Verifying...' : 'Verify Product Key'),
               ),
             ),
 
             const SizedBox(height: 12),
 
-            /// ✅ Demo Skip Button
             SizedBox(
               width: double.infinity,
               height: 52,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.bolt),
                 label: const Text(
-                  "Skip Product Key (Demo)",
+                  'Product Key Required',
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
-                onPressed: () {
-                  _goNext(
-                    deviceId: deviceId,
-                    equipmentType: equipmentType,
-                    productKey: "DEMO-KEY",
-                  );
-                },
+                onPressed: null,
               ),
             ),
 
             const SizedBox(height: 10),
 
             Text(
-              "Demo mode allows registration without verification.\nProduct key will be validated via backend later.",
+              'A valid product key is required to continue.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12.5,

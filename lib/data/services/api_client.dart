@@ -22,9 +22,12 @@ class ApiClient {
       url,
       headers: headers,
       body: jsonEncode(body),
-    );
+    ).timeout(const Duration(seconds: 8));
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final raw = jsonDecode(response.body);
+    final decoded = raw is Map<String, dynamic>
+        ? raw
+        : <String, dynamic>{};
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded;

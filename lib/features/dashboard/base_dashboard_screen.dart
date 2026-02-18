@@ -4,12 +4,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/api/android_data_api.dart';
-import '../notifications/notification_service.dart';
 import 'widgets/dashboard_top_bar.dart';
 
-import '../notifications/alert_engine.dart';
-import '../notifications/alert_settings.dart';
-import '../notifications/alert_settings_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'models/unified_telemetry.dart';
 import '../../data/api/immediate_send_api.dart';
@@ -50,18 +46,20 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   bool _noInternet = false;
   DateTime? _lastManualRefresh;
   late AnimationController _refreshController;
+  static const int _offlineThresholdMinutes = 16;
 
-  final AlertEngine _alertEngine = AlertEngine();
-  AlertSettings? _settings;
 
   // ================= TIME =================
 
   bool isStale() =>
-      _lastSync == null || DateTime.now().difference(_lastSync!).inMinutes > 5;
+    _lastSync == null ||
+    DateTime.now().difference(_lastSync!).inMinutes >
+        _offlineThresholdMinutes;
   
   bool isOnline() {
     if (_lastSync == null) return false;
-    return DateTime.now().difference(_lastSync!).inMinutes <= 5;
+    return DateTime.now().difference(_lastSync!).inMinutes <=
+        _offlineThresholdMinutes;
   }
 
   bool get hasNoData =>
@@ -69,10 +67,24 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
   String _timeAgo(DateTime t) {
     final d = DateTime.now().difference(t);
-    if (d.inSeconds < 10) return "a few seconds ago";
-    if (d.inSeconds < 60) return "${d.inSeconds} sec ago";
-    if (d.inMinutes < 60) return "${d.inMinutes} min ago";
-    if (d.inHours < 24) return "${d.inHours} hrs ago";
+
+    // 🔥 NEW LOGIC
+    if (d.inSeconds < 50) {
+      return "a few seconds ago";
+    }
+
+    if (d.inSeconds < 60) {
+      return "1 min ago";
+    }
+
+    if (d.inMinutes < 60) {
+      return "${d.inMinutes} min ago";
+    }
+
+    if (d.inHours < 24) {
+      return "${d.inHours} hrs ago";
+    }
+
     return "${d.inDays} days ago";
   }
 
@@ -111,22 +123,6 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
     if (mounted) setState(() {});
 
-    if (_settings != null &&
-        _telemetry?.pv != null &&
-        _telemetry?.sv != null) {
-      final fire = _alertEngine.shouldTrigger(
-        pv: _telemetry!.pv!,
-        sv: _telemetry!.sv!,
-        settings: _settings!,
-      );
-
-      if (fire) {
-        await NotificationService.send(
-          "Cold Chain Alert",
-          "Temperature abnormal for extended time",
-        );
-      }
-    }
   }
 
   void _listenToConnectivity() {
@@ -137,6 +133,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
 
       if (hasInternet && _noInternet) {
+        if (!mounted) return;
         setState(() => _noInternet = false);
         _fetch();
 
@@ -153,6 +150,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   }
 
   Future<void> _manualRefresh() async {
+    if (!mounted) return;
     _refreshController.repeat();
 
     final now = DateTime.now();
@@ -165,16 +163,9 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
       await Future.delayed(const Duration(milliseconds: 600));
     }
 
+    if (!mounted) return;
     _refreshController.stop();
     _refreshController.reset();
-  }
-
-  Future<void> _loadAlertSettings() async {
-    final d = await AlertSettingsStorage.load();
-    _settings = AlertSettings(
-      app: d["app"],
-      level: d["level"],
-    );
   }
 
   @override
@@ -187,14 +178,15 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _loadAlertSettings();
     _fetch();
     _listenToConnectivity();
     _timer = Timer.periodic(
       const Duration(seconds: 60),
       (_) async {
-        await ImmediateSendApi.trigger(widget.deviceId);
-        await _fetch(isRefresh: true);
+        try {
+          await ImmediateSendApi.trigger(widget.deviceId);
+          await _fetch(isRefresh: true);
+        } catch (_) {}
   },
 );
 
@@ -296,6 +288,8 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
     final t = _telemetry;
     final bool connecting = _initialLoading;
     final bool noData = hasNoData;
+    final pvText = (t?.pv == null) ? "--.-" : t!.pv!.toStringAsFixed(1);
+    final svText = (t?.sv == null) ? "--.-" : t!.sv!.toStringAsFixed(1);
 
     if (_noInternet) {
       return Scaffold(
@@ -316,7 +310,6 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
         curve: Curves.easeInOut,
         builder: (context, value, child) =>
             Opacity(opacity: value, child: child),
-        onEnd: () => setState(() {}),
         child: const Text(
           "CONNECTING...",
           style: TextStyle(
@@ -366,7 +359,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
                           ? "--.- °C"
                           : noData
                               ? "— —"
-                              : "${t!.pv!.toStringAsFixed(1)} °C",
+                              : "$pvText °C",
                       style: const TextStyle(
                         fontSize: 66,
                         fontWeight: FontWeight.w900,
@@ -389,7 +382,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
                             ? "SET --.- °C"
                             : noData
                                 ? "SET — —"
-                                : "SET ${t!.sv!.toStringAsFixed(1)} °C",
+                                : "SET $svText °C",
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ),
@@ -488,7 +481,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
                           ),
                           const SizedBox(width: 14),
                           Text(
-                            t!.systemHealthy ? "HEALTHY" : "ERROR",
+                            t!.systemHealthy ? "HEALTHY" : "FAILURE",
                             style: TextStyle(
                               letterSpacing: 2,
                               fontWeight: FontWeight.w700,

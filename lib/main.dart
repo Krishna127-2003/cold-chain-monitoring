@@ -5,6 +5,10 @@ import 'core/theme/app_theme.dart';
 import 'routes/app_routes.dart';
 import 'firebase_options.dart';
 import 'features/notifications/notification_service.dart';
+import 'core/ui/app_snackbar.dart';
+
+final GlobalKey<ScaffoldMessengerState> _rootMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +23,7 @@ Future<void> main() async {
 
 
   await NotificationService.init();
+  await NotificationService.requestPermission();
 
   runApp(const ColdChainApp());
 }
@@ -28,9 +33,7 @@ class ColdChainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
-    final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
-    GlobalKey<ScaffoldMessengerState>();
+    AppSnackBar.init(_rootMessengerKey);
 
 
     return MaterialApp(
@@ -38,17 +41,26 @@ class ColdChainApp extends StatelessWidget {
       title: 'MarkEn IoT',
       theme: AppTheme.theme,
       initialRoute: AppRoutes.splash,
-      scaffoldMessengerKey: rootMessengerKey,
+      scaffoldMessengerKey: _rootMessengerKey,
       routes: AppRoutes.routes,
 
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.dashboard) {
-          final args = settings.arguments as Map<String, dynamic>;
+          final args = settings.arguments;
+          if (args is! Map<String, dynamic>) {
+            return MaterialPageRoute(
+              builder: (_) => const DeviceDashboardScreen(
+                deviceId: "UNKNOWN",
+                equipmentType: "DEEP_FREEZER",
+              ),
+            );
+          }
 
           return MaterialPageRoute(
             builder: (_) => DeviceDashboardScreen(
-              deviceId: args["deviceId"],
-              equipmentType: args["equipmentType"] ?? "DEEP_FREEZER",
+              deviceId: (args["deviceId"] ?? "UNKNOWN").toString(),
+              equipmentType: (args["equipmentType"] ?? "DEEP_FREEZER")
+                  .toString(),
             ),
           );
         }

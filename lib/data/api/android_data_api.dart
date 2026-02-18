@@ -6,13 +6,11 @@ import 'package:http/http.dart' as http;
 import '../../features/dashboard/models/unified_telemetry.dart';
 import '../../features/dashboard/utils/unified_telemetry_mapper.dart';
 import '../session/session_manager.dart';
-import '../../features/notifications/alert_processor.dart';
 
 class AndroidDataApi {
   static const String _baseUrl =
       "https://testingesp32-b6dwfgcqb7drf4fu.centralindia-01.azurewebsites.net/api/GetAndroidData";
 
-  static final AlertProcessor _alertProcessor = AlertProcessor();
 
   /// ✅ Fetch unified telemetry (single clean object)
   static Future<UnifiedTelemetry?> fetchByDeviceId(String deviceId) async {
@@ -30,6 +28,10 @@ class AndroidDataApi {
       }
 
       final raw = jsonDecode(response.body);
+      if (raw is! Map<String, dynamic>) {
+        debugPrint("❌ API RESPONSE FORMAT ERROR");
+        return null;
+      }
 
       debugPrint("RAW API RESPONSE = $raw");
       debugPrint("latest_v TYPE = ${raw["latest_v"].runtimeType}");
@@ -40,13 +42,6 @@ class AndroidDataApi {
       if (telemetry == null) return null;
 
       // 🚨 Centralized alert processing
-      if (telemetry.pv != null && telemetry.sv != null) {
-        unawaited(
-          _alertProcessor
-              .process(pv: telemetry.pv!, sv: telemetry.sv!)
-              .catchError((_) {}),
-        );
-      }
 
       // ⏱ Save last sync
       unawaited(

@@ -52,7 +52,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
           if (Navigator.canPop(context)) {
             Navigator.pop(context);
           } else {
-            Navigator.pushNamed(context, AppRoutes.allDevices);
+            Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
           }
         },
       ),
@@ -92,16 +92,9 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
           ),
           onSelected: (value) {
             if (value == "saved_devices") {
-              Navigator.pushNamed(context, AppRoutes.allDevices);
+              Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
             } else if (value == "add_new_device") {
-              Navigator.pushReplacementNamed(
-              context,
-              AppRoutes.dashboard,
-              arguments: {
-                "deviceId": deviceId,
-                "equipmentType": equipmentType,
-              },
-            );
+              Navigator.pushReplacementNamed(context, AppRoutes.services);
             }
           },
           itemBuilder: (_) => const [

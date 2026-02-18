@@ -111,45 +111,56 @@ class _AuthScreenState extends State<AuthScreen>
       return;
     }
 
-    final email = userCredential.user!.email!;
+    final email = userCredential.user?.email;
+    if (email == null || email.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() => _loadingGoogle = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Google account email is unavailable."),
+        ),
+      );
+      return;
+    }
 
-    /// ✅ 1. SEND USER INFO TO AZURE (NEW)
-    final exists = await UserInfoApi.doesUserExist(email);
+    try {
+      final exists = await UserInfoApi.doesUserExist(email);
 
-    if (!exists) {
-      await UserInfoApi.sendUserLogin(
+      if (!exists) {
+        await UserInfoApi.sendUserLogin(
+          email: email,
+          loginType: "google",
+        );
+      }
+
+      await SessionManager.saveLogin(
+        loginType: "google",
+        email: email,
+      );
+
+      await DeviceSyncService.syncFromBackend(
         email: email,
         loginType: "google",
       );
+
+      await _deviceRepo.getRegisteredDevices(
+        email: email,
+        loginType: "google",
+      );
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Google sign-in flow failed.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loadingGoogle = false);
+      }
     }
-
-    /// ✅ 2. SAVE SESSION LOCALLY
-    await SessionManager.saveLogin(
-      loginType: "google",
-      email: email,
-    );
-
-    /// ✅ 3. SYNC BACKEND DEVICES (THIS WAS MISSING)
-    await DeviceSyncService.syncFromBackend(
-      email: email,
-      loginType: "google",
-    );
-
-
-    /// ✅ 4. CHECK LOCAL DEVICES AFTER SYNC
-    await _deviceRepo.getRegisteredDevices(
-      email: email,
-      loginType: "google",
-    );
-
-    if (!mounted) return;
-
-    setState(() => _loadingGoogle = false);
-
-    /// ✅ 5. NAVIGATE CORRECTLY
-    Navigator.pushReplacementNamed(context, AppRoutes.allDevices);
   }
-
   Future<void> _onGuestPressed() async {
     if (!acceptedPolicy) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -164,25 +175,37 @@ class _AuthScreenState extends State<AuthScreen>
 
     if (!mounted) return;
 
-    final exists = await UserInfoApi.doesUserExist("guest");
+    final guestBackendId =
+        "guest_${DateTime.now().millisecondsSinceEpoch}";
 
-    if (!exists) {
-      await UserInfoApi.sendUserLogin(
-        email: "guest",
+    try {
+      final exists = await UserInfoApi.doesUserExist(guestBackendId);
+
+      if (!exists) {
+        await UserInfoApi.sendUserLogin(
+          email: guestBackendId,
+          loginType: "guest",
+        );
+      }
+
+      await SessionManager.saveLogin(
         loginType: "guest",
+        email: guestBackendId,
       );
+
+      if (!mounted) return;
+      await _goNext();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Guest sign-in failed.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loadingGuest = false);
+      }
     }
-
-     /// ✅ SAVE GUEST SESSION
-    await SessionManager.saveLogin(loginType: "guest");
-
-    if (!mounted) return;
-
-    setState(() => _loadingGuest = false);
-
-    await _goNext();
   }
-
   @override
   Widget build(BuildContext context) {
     final pad = Responsive.pad(context);
@@ -190,28 +213,15 @@ class _AuthScreenState extends State<AuthScreen>
     final size = MediaQuery.of(context).size;
     final isSmall = size.height < 700;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // ✅ background gradient depends on dark/light
-    final bgGradient = isDark
-        ? const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF050A18),
-              Color(0xFF08112A),
-              Color(0xFF060B1C),
-            ],
-          )
-        : const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF7FAFF),
-              Color(0xFFEFF6FF),
-              Color(0xFFECFEFF),
-            ],
-          );
+    const bgGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFFF7FAFF),
+        Color(0xFFEFF6FF),
+        Color(0xFFECFEFF),
+      ],
+    );
 
     return Scaffold(
       body: Container(
@@ -225,19 +235,19 @@ class _AuthScreenState extends State<AuthScreen>
               top: -90,
               left: -90,
               size: 250,
-              color: isDark ? const Color(0xFF1D4ED8) : const Color(0xFF93C5FD),
+              color: const Color(0xFF93C5FD),
             ),
             _GlowBlob(
               top: 150,
               right: -110,
               size: 260,
-              color: isDark ? const Color(0xFF0EA5E9) : const Color(0xFFBAE6FD),
+              color: const Color(0xFFBAE6FD),
             ),
             _GlowBlob(
               bottom: -110,
               left: 60,
               size: 280,
-              color: isDark ? const Color(0xFF2563EB) : const Color(0xFFBFDBFE),
+              color: const Color(0xFFBFDBFE),
             ),
 
             SafeArea(
@@ -267,25 +277,17 @@ class _AuthScreenState extends State<AuthScreen>
                                       vertical: isSmall ? 18 : 22,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.06)
-                                          : Colors.white,
+                                      color: Colors.white,
                                       borderRadius: BorderRadius.circular(24),
                                       border: Border.all(
-                                        color: isDark
-                                            ? Colors.white.withValues(
-                                                alpha: 0.10,
-                                              )
-                                            : Colors.black.withValues(
-                                                alpha: 0.06,
-                                              ),
+                                        color: Colors.black.withValues(alpha: 0.06),
                                       ),
                                       boxShadow: [
                                         BoxShadow(
                                           blurRadius: 30,
                                           offset: const Offset(0, 18),
                                           color: Colors.black.withValues(
-                                            alpha: isDark ? 0.50 : 0.10,
+                                            alpha: 0.10,
                                           ),
                                         )
                                       ],
@@ -329,9 +331,7 @@ class _AuthScreenState extends State<AuthScreen>
                                           style: TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.w900,
-                                            color: isDark
-                                                ? Colors.white
-                                                : const Color(0xFF0F172A),
+                                            color: const Color(0xFF0F172A),
                                           ),
                                         ),
                                         
@@ -343,9 +343,7 @@ class _AuthScreenState extends State<AuthScreen>
                                           style: TextStyle(
                                             fontSize: 13.5,
                                             fontWeight: FontWeight.w600,
-                                            color: isDark
-                                                ? Colors.white70
-                                                : const Color(0xFF475569),
+                                            color: const Color(0xFF475569),
                                             height: 1.35,
                                           ),
                                         ),
@@ -361,7 +359,7 @@ class _AuthScreenState extends State<AuthScreen>
                                               : _onGooglePressed,
                                           icon: const _GoogleIcon(size: 24),
                                           filled: true,
-                                          darkMode: isDark,
+                                          
                                         ),
 
                                         const SizedBox(height: 12),
@@ -376,12 +374,10 @@ class _AuthScreenState extends State<AuthScreen>
                                           icon: Icon(
                                             Icons.person_outline,
                                             size: 22,
-                                            color: isDark
-                                                ? Colors.white
-                                                : const Color(0xFF0F172A),
+                                            color: const Color(0xFF0F172A),
                                           ),
                                           filled: false,
-                                          darkMode: isDark,
+                                          
                                         ),
 
                                         const SizedBox(height: 14),
@@ -393,9 +389,7 @@ class _AuthScreenState extends State<AuthScreen>
                                             fontSize: 11.5,
                                             height: 1.35,
                                             fontWeight: FontWeight.w600,
-                                            color: isDark
-                                                ? Colors.white60
-                                                : const Color(0xFF64748B),
+                                            color: const Color(0xFF64748B),
                                           ),
                                         ),
 
@@ -410,23 +404,31 @@ class _AuthScreenState extends State<AuthScreen>
                                                   value: acceptedPolicy,
                                                   activeColor: const Color(0xFF60A5FA),
                                                   onChanged: (v) async {
+                                                    final accepted = v ?? false;
+                                                    if (mounted) {
+                                                      setState(() => acceptedPolicy = accepted);
+                                                    }
                                                     final prefs = await SharedPreferences.getInstance();
 
-                                                    setState(() => acceptedPolicy = v ?? false);
-
-                                                    if (v == true) {
+                                                    if (accepted) {
                                                       await prefs.setString(
                                                         "accepted_policy_version",
                                                         AuthScreen.policyVersion,
+                                                      );
+                                                    } else {
+                                                      await prefs.remove(
+                                                        "accepted_policy_version",
                                                       );
                                                     }
                                                   },
                                                 ),
                                                 Text(
                                                   "I agree to the ",
-                                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
+                                                  style: const TextStyle(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: Color(0xFF64748B),
+                                                          )
                                                 ),
                                                 GestureDetector(
                                                   onTap: () {
@@ -461,48 +463,18 @@ class _AuthScreenState extends State<AuthScreen>
                                               },
                                               child: Text(
                                                 "Read our Privacy Policy to learn how we protect your data.",
-                                                style: Theme.of(context).textTheme.bodySmall,
+                                                style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: Color(0xFF64748B),
+                                                        )
                                               ),
                                             ),
                                           ],
                                         ),
 
                                         const SizedBox(height: 8),
-
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) => const PrivacyPolicyScreen(),
-                                                  ),
-                                                );
-                                              },
-                                              child: const Text(
-                                                "",
-                                                style: TextStyle(color: Color(0xFF60A5FA)),
-                                              ),
-                                            ),
-                                            const Text("  "),
-                                            GestureDetector(
-                                              onTap: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) => const PrivacyPolicyScreen(),
-                                                  ),
-                                                );
-                                              },
-                                              child: const Text(
-                                                "Privacy Policy",
-                                                style: TextStyle(color: Color(0xFF60A5FA)),
-                                              ),
-                                            ),
-                                          ],
-                                        )
+                                        const SizedBox.shrink(),
                                       ],
                                     ),
                                   ),
@@ -534,7 +506,6 @@ class _AuthButton extends StatelessWidget {
   final bool filled;
   final bool loading;
   final VoidCallback? onPressed;
-  final bool darkMode;
 
   const _AuthButton({
     required this.text,
@@ -542,24 +513,13 @@ class _AuthButton extends StatelessWidget {
     required this.onPressed,
     required this.loading,
     required this.filled,
-    required this.darkMode,
   });
 
   @override
   Widget build(BuildContext context) {
-    final border = darkMode
-        ? Colors.white.withValues(alpha: 0.14)
-        : Colors.black.withValues(alpha: 0.10);
-
-    final bg = filled
-        ? Colors.white
-        : (darkMode
-            ? Colors.white.withValues(alpha: 0.06)
-            : const Color(0xFFF8FAFC));
-
-    final fg = filled
-        ? const Color(0xFF0F172A)
-        : (darkMode ? Colors.white : const Color(0xFF0F172A));
+    final border = Colors.black.withValues(alpha: 0.10);
+    final bg = filled ? Colors.white : const Color(0xFFF8FAFC);
+    const fg = Color(0xFF0F172A);
 
     return SizedBox(
       width: double.infinity,
@@ -671,4 +631,6 @@ class _GlowBlob extends StatelessWidget {
     );
   }
 }
+
+
 

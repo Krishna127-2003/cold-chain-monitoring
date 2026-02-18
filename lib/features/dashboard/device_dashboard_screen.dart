@@ -13,11 +13,13 @@ class DeviceDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
     final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        rawArgs is Map<String, dynamic> ? rawArgs : const <String, dynamic>{};
 
-    final activeDeviceId = args?["deviceId"] ?? deviceId;
-    final equipmentType = args?["equipmentType"] ?? this.equipmentType;
+    final activeDeviceId = (args["deviceId"] ?? deviceId).toString();
+    final equipmentType =
+        (args["equipmentType"] ?? this.equipmentType).toString();
 
     switch (equipmentType) {
       case "DEEP_FREEZER":

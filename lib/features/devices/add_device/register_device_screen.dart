@@ -1,13 +1,11 @@
-// ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 
-import '../../../routes/app_routes.dart';
-import '../../../data/models/registered_device.dart';
-import '../../../data/repository/device_repository.dart';
-import '../../../data/repository_impl/local_device_repository.dart';
+import '../../../data/api/device_management_api.dart';
 import '../../../data/session/session_manager.dart';
-import '../../../data/api/user_info_api.dart';
+import '../../../routes/app_routes.dart';
+import '../../../core/ui/app_toast.dart';
+import '../../../core/ui/loading_overlay.dart';
 
 class RegisterDeviceScreen extends StatefulWidget {
   const RegisterDeviceScreen({super.key});
@@ -22,8 +20,6 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
   final TextEditingController _areaController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
 
-  final DeviceRepository _deviceRepo = LocalDeviceRepository();
-
   bool _loading = false;
 
   @override
@@ -35,75 +31,79 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
     super.dispose();
   }
 
+  void _show(String msg) {
+    AppToast.show(msg);
+  }
+
+
   @override
   Widget build(BuildContext context) {
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
     final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        rawArgs is Map<String, dynamic> ? rawArgs : const <String, dynamic>{};
 
-    final String deviceId = args?["deviceId"] ?? "UNKNOWN";
-    final String equipmentType = args?["equipmentType"] ?? "UNKNOWN";
-    final String productKey = args?["productKey"] ?? "UNKNOWN";
+    final String deviceId = (args['deviceId'] ?? 'UNKNOWN').toString();
+    final String equipmentType =
+        (args['equipmentType'] ?? 'UNKNOWN').toString();
+    final String productKey = (args['productKey'] ?? 'UNKNOWN').toString();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Register Device")),
-      body: SingleChildScrollView(
+      appBar: AppBar(title: const Text('Register Device')),
+      body: LoadingOverlay(
+        loading: _loading,
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
-              "Registering Device: $deviceId",
+              'Registering Device: $deviceId',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              "Service: ${equipmentType.replaceAll('_', ' ')}",
+              'Service: ${equipmentType.replaceAll('_', ' ')}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
 
-            /// Device Name
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
-                labelText: "Device Display Name",
+                labelText: 'Device Display Name',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
-            /// Department
             TextField(
               controller: _deptController,
               decoration: const InputDecoration(
-                labelText: "Department (e.g., ICU / Blood Bank)",
+                labelText: 'Department (e.g., ICU / Blood Bank)',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
-            /// Area (optional)
             TextField(
               controller: _areaController,
               decoration: const InputDecoration(
-                labelText: "Area / Room (optional)",
+                labelText: 'Area / Room (optional)',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
-            /// PIN
             TextField(
               controller: _pinController,
               keyboardType: TextInputType.number,
               obscureText: true,
               decoration: const InputDecoration(
-                labelText: "Set PIN (4 or 6 digits)",
+                labelText: 'Set 4-digit PIN',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 20),
 
-            /// REGISTER BUTTON
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -111,73 +111,68 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
                 onPressed: _loading
                     ? null
                     : () async {
+                        final pin = _pinController.text.trim();
+                        final pinValid = RegExp(r'^\d{4}$').hasMatch(pin);
+
                         if (_nameController.text.trim().isEmpty ||
                             _deptController.text.trim().isEmpty ||
-                            _pinController.text.trim().length < 4) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Fill required fields correctly"),
-                            ),
-                          );
+                            !pinValid) {
+                          AppToast.show("PIN must be exactly 4 digits");
                           return;
                         }
 
                         setState(() => _loading = true);
 
-                        /// SESSION INFO
-                        final loginType =
-                            await SessionManager.getLoginType() ?? "guest";
-                        final email =
-                            await SessionManager.getEmail() ?? "guest";
+                        try {
+                          final nav = Navigator.of(context); // capture before async use
 
-                        final now = DateTime.now().toUtc();
+                          final email = await SessionManager.getEmail();
+                          if (email == null || email.isEmpty) {
+                            throw Exception('Email missing');
+                          }
 
-                        /// ✅ LOCAL MODEL (SOURCE OF TRUTH)
-                        final device = RegisteredDevice(
-                          deviceId: deviceId,
-                          qrCode: deviceId, // QR = deviceId for now
-                          productKey: productKey,
-                          serviceType: equipmentType,
-                          email: email,
-                          loginType: loginType,
-                          registeredAt: now,
-                          displayName: _nameController.text.trim(),
-                          department: _deptController.text.trim(),
-                          area: _areaController.text.trim().isEmpty
-                              ? "Unknown Area"
-                              : _areaController.text.trim(),
-                          pin: _pinController.text.trim(),
-                        );
 
-                        /// 1️⃣ SAVE LOCALLY (offline-safe)
-                        await _deviceRepo.registerDevice(device);
+                          final result = await DeviceManagementApi.registerDevice(
+                            email: email,
+                            deviceId: deviceId,
 
-                        /// 2️⃣ SEND REGISTRATION CALLBACK TO AZURE
-                        await UserInfoApi.sendDeviceRegistration(
-                          email: email,
-                          loginType: loginType,
-                          deviceId: deviceId,
-                          qrCode: deviceId,
-                          productKey: productKey,
-                          serviceType: equipmentType,
-                          displayName: _nameController.text.trim(),
-                          department: _deptController.text.trim(),
-                          area: _areaController.text.trim().isEmpty
-                              ? "Unknown Area"
-                              : _areaController.text.trim(),
-                          pin: _pinController.text.trim(),
-                        );
-                        
-                        setState(() => _loading = false);
+                            deviceProductKey: productKey,
+                            deviceName: deviceId,
 
-                        /// 3️⃣ GO TO SAVED DEVICES
-                        Navigator.popUntil(
-                          context,
-                          (route) => route.settings.name == AppRoutes.allDevices,
-                        );
+                            deviceDisplayName:
+                                _nameController.text.trim(),
+                            deviceDeptName:
+                                _deptController.text.trim(),
+                            deviceAreaRoom: _areaController.text.trim(),
+
+                            devicePin: pin,
+                            deviceType: equipmentType,
+
+                          );
+
+                          if (!mounted) return;
+
+                          if (!result.success) {
+                            _show(result.message);
+                            return;
+                          }
+
+                          if (!mounted) return;
+                          nav.popUntil(
+                            (route) => route.settings.name == AppRoutes.allDevices,
+                          );
+
+                        } catch (_) {
+                          if (!mounted) return;
+                          AppToast.show("Device registration failed");
+                        } finally {
+                          if (mounted) {
+                            setState(() => _loading = false);
+                          }
+                        }
                       },
                 child: Text(
-                  _loading ? "Registering..." : "Register Device",
+                  _loading ? 'Registering...' : 'Register Device',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -185,6 +180,7 @@ class _RegisterDeviceScreenState extends State<RegisterDeviceScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

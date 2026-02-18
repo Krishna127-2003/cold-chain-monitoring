@@ -30,19 +30,26 @@
 
     DateTime? parseTimestamp(String? raw) {
       if (raw == null) return null;
+      final isoParsed = DateTime.tryParse(raw);
+      if (isoParsed != null) return isoParsed;
 
       final parts = raw.split(' ');
+      if (parts.length != 2) return null;
       final d = parts[0].split('/');
       final t = parts[1].split(':');
+      if (d.length != 3 || t.length != 3) return null;
 
-      return DateTime(
-        int.parse(d[2]),
-        int.parse(d[1]),
-        int.parse(d[0]),
-        int.parse(t[0]),
-        int.parse(t[1]),
-        int.parse(t[2]),
-      );
+      final year = int.tryParse(d[2]);
+      final month = int.tryParse(d[1]);
+      final day = int.tryParse(d[0]);
+      final hour = int.tryParse(t[0]);
+      final minute = int.tryParse(t[1]);
+      final second = int.tryParse(t[2]);
+      if ([year, month, day, hour, minute, second].contains(null)) {
+        return null;
+      }
+
+      return DateTime(year!, month!, day!, hour!, minute!, second!);
     }
 
     return UnifiedTelemetry(

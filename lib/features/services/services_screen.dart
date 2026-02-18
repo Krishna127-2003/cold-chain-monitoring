@@ -125,20 +125,33 @@ class _ServicesScreenState extends State<ServicesScreen> {
   /// 🔥 LOGOUT FLOW
   Future<void> _logout() async {
     setState(() => _loggingOut = true);
+    var navigated = false;
 
     try {
-      await GoogleAuthService.signOut();
-    } catch (_) {}
+      try {
+        await GoogleAuthService.signOut();
+      } catch (_) {}
 
-    await SessionManager.logout();
+      await SessionManager.logout();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.auth,
-      (route) => false,
-    );
+      navigated = true;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.auth,
+        (route) => false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Logout failed. Please try again.")),
+      );
+    } finally {
+      if (!navigated && mounted) {
+        setState(() => _loggingOut = false);
+      }
+    }
   }
 
   @override

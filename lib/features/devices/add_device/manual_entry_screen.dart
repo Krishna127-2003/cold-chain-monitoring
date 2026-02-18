@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../routes/app_routes.dart';
-import '../../dashboard/utils/device_id_helper.dart';class ManualEntryScreen extends StatefulWidget {
+import '../../dashboard/utils/device_id_helper.dart';
+
+class ManualEntryScreen extends StatefulWidget {
   const ManualEntryScreen({super.key});
 
   @override
@@ -29,18 +31,22 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       return;
     }
 
+    if (!mounted) return;
     setState(() => _loading = true);
 
     try {
+      final rawArgs = ModalRoute.of(context)?.settings.arguments;
+      final args = rawArgs is Map<String, dynamic>
+          ? rawArgs
+          : const <String, dynamic>{};
+
+      if (!mounted) return;
       await Navigator.pushNamed(
         context,
         AppRoutes.productKey,
         arguments: {
           'deviceId': deviceId,
-          'equipmentType':
-              (ModalRoute.of(context)?.settings.arguments
-                      as Map<String, dynamic>?)?['equipmentType'] ??
-                  'UNKNOWN',
+          'equipmentType': (args['equipmentType'] ?? 'UNKNOWN').toString(),
         },
       );
     } finally {
@@ -50,9 +56,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
     final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final equipmentType = args?['equipmentType'] ?? 'UNKNOWN';
+        rawArgs is Map<String, dynamic> ? rawArgs : const <String, dynamic>{};
+    final equipmentType = (args['equipmentType'] ?? 'UNKNOWN').toString();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Enter Device Code')),

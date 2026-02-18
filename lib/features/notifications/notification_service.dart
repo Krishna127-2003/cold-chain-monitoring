@@ -26,13 +26,24 @@ class NotificationService {
     );
 
     const details = NotificationDetails(android: androidDetails);
+    final id = DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
 
     await _plugin.show(
-      id: 0,
+      id: id,
       title: title,
       body: body,
       notificationDetails: details,
     );
+  }
+
+  static Future<void> requestPermission() async {
+    final androidImplementation =
+        _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      await androidImplementation.requestNotificationsPermission();
+    }
   }
 
   static Future<void> sendRepeated(

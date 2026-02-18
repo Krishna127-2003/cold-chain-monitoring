@@ -3,16 +3,23 @@ class RegisteredDevice {
   final String qrCode;
   final String productKey;
   final String serviceType;
+
   final String email;
   final String loginType;
+
   final DateTime registeredAt;
+
   final String displayName;
   final String department;
   final String area;
-  final String pin;
 
+  final String pinHash;
 
-  RegisteredDevice({
+  final int deviceNumber;
+
+  final String modeOp;
+
+  const RegisteredDevice({
     required this.deviceId,
     required this.qrCode,
     required this.productKey,
@@ -23,36 +30,45 @@ class RegisteredDevice {
     required this.displayName,
     required this.department,
     required this.area,
-    required this.pin,
+    required this.pinHash,
+    required this.deviceNumber,
+    required this.modeOp,
   });
-
-  Map<String, dynamic> toJson() => {
-        "deviceId": deviceId,
-        "qrCode": qrCode,
-        "productKey": productKey,
-        "serviceType": serviceType,
-        "email": email,
-        "loginType": loginType,
-        "registeredAt": registeredAt.toIso8601String(),
-        "displayName": displayName,
-        "department": department,
-        "area": area,
-        "pin": pin,
-      };
 
   factory RegisteredDevice.fromJson(Map<String, dynamic> json) {
     return RegisteredDevice(
-      deviceId: json["deviceId"],
-      qrCode: json["qrCode"],
-      productKey: json["productKey"],
-      serviceType: json["serviceType"],
-      email: json["email"],
-      loginType: json["loginType"],
-      registeredAt: DateTime.parse(json["registeredAt"]),
-      displayName: json["displayName"] ?? "Unnamed Device",
-      department: json["department"] ?? "Unknown Department",
-      area: json["area"] ?? "Unknown Area",
-      pin: json["pin"] ?? "0000",
+      deviceId: json['deviceId'] ?? '',
+      qrCode: json['qrCode'] ?? '',
+      productKey: json['productKey'] ?? '',
+      serviceType: json['serviceType'] ?? '',
+      email: json['email'] ?? '',
+      loginType: json['loginType'] ?? '',
+      registeredAt: DateTime.tryParse(json['registeredAt'] ?? '') ??
+          DateTime.now().toUtc(),
+      displayName: json['displayName'] ?? '',
+      department: json['department'] ?? '',
+      area: json['area'] ?? '',
+      pinHash: json['pinHash'] ?? '',
+      deviceNumber: json['deviceNumber'] ?? 0,
+      modeOp: json['modeOp'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deviceId': deviceId,
+      'qrCode': qrCode,
+      'productKey': productKey,
+      'serviceType': serviceType,
+      'email': email,
+      'loginType': loginType,
+      'registeredAt': registeredAt.toIso8601String(),
+      'displayName': displayName,
+      'department': department,
+      'area': area,
+      'pinHash': pinHash,
+      'deviceNumber': deviceNumber,
+      'modeOp': modeOp,
+    };
   }
 }

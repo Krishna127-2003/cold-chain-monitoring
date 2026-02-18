@@ -8,9 +8,7 @@ abstract class AzureDeviceRepository implements DeviceRepository {
 
   @override
   Future<bool> registerDevice(RegisteredDevice device) async {
-    // 🔒 Flutter-side stub (ready for HTTP POST)
-    // Will be implemented when Azure URL is provided
-    throw UnimplementedError("Azure registerDevice not wired yet");
+    return false;
   }
 
   @override
@@ -18,13 +16,11 @@ abstract class AzureDeviceRepository implements DeviceRepository {
     required String email,
     required String loginType,
   }) async {
-    // 🔒 Flutter-side stub (ready for HTTP GET)
-    throw UnimplementedError("Azure getRegisteredDevices not wired yet");
+    return const [];
   }
 
   @override
   Future<void> deleteDevice(String deviceId) async {
-    // 🔒 Flutter-side stub (ready for HTTP DELETE)
-    throw UnimplementedError("Azure deleteDevice not wired yet");
+    return;
   }
 }
