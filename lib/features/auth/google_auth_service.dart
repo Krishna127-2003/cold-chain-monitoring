@@ -2,6 +2,7 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../../core/utils/log_safe.dart';
 
 class GoogleAuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -28,7 +29,7 @@ class GoogleAuthService {
 
       return await _auth.signInWithCredential(credential);
     } catch (e) {
-      print("Google Sign-In failed: $e");
+      logSafe("Google Sign-In failed: $e");
       return null;
     }
   }

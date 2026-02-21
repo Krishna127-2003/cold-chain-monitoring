@@ -1,3 +1,5 @@
+import '../datalogger/models/datalogger_telemetry.dart';
+
 class UnifiedTelemetry {
   final String deviceId;
   final DateTime? timestamp;
@@ -62,4 +64,36 @@ class UnifiedTelemetry {
   );
 }
 
+factory UnifiedTelemetry.fromLogger(
+  String deviceId,
+  DataloggerTelemetry logger,
+) {
+  return UnifiedTelemetry(
+    deviceId: deviceId,
+    timestamp: logger.timestamp,
+
+    // logger doesn't have PV/SV
+    pv: null,
+    sv: null,
+
+    // assume healthy unless backend says otherwise
+    systemHealthy: true,
+
+    powerOn: true,
+    battery: 0,
+
+    compressor1: false,
+    compressor2: false,
+    compressor: false,
+
+    heater: false,
+    agitator: false,
+    defrost: false,
+
+    probeOk: true,
+
+    alarm: "NONE",
+    logTime: null,
+  );
+}
 }

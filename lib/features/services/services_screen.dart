@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/utils/responsive.dart';
 import '../../routes/app_routes.dart';
-import '../auth/google_auth_service.dart';
-import '../../data/session/session_manager.dart';
+
 
 
 class ServicesScreen extends StatefulWidget {
@@ -14,7 +13,6 @@ class ServicesScreen extends StatefulWidget {
 }
 
 class _ServicesScreenState extends State<ServicesScreen> {
-  bool _loggingOut = false;
 
   /// 🔥 NEW: Ask how user wants to add device
   void _chooseAddMethod(BuildContext context, String equipmentType) {
@@ -96,97 +94,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
     );
   }
 
-  /// 🔐 CONFIRM LOGOUT
-  Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Logout"),
-        content: const Text(
-          "Are you sure you want to logout?\nYou will need to sign in again.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Logout"),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) _logout();
-  }
-
-  /// 🔥 LOGOUT FLOW
-  Future<void> _logout() async {
-    setState(() => _loggingOut = true);
-    var navigated = false;
-
-    try {
-      try {
-        await GoogleAuthService.signOut();
-      } catch (_) {}
-
-      await SessionManager.logout();
-
-      if (!mounted) return;
-
-      navigated = true;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.auth,
-        (route) => false,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Logout failed. Please try again.")),
-      );
-    } finally {
-      if (!navigated && mounted) {
-        setState(() => _loggingOut = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final pad = Responsive.pad(context);
-    final primaryText = Theme.of(context).textTheme.titleMedium?.color;
 
     return Stack(
       children: [
         Scaffold(
           appBar: AppBar(
             title: const Text("Services"),
-            actions: [
-              PopupMenuButton<String>(
-                tooltip: "Account",
-                icon: Icon(Icons.more_vert, color: primaryText),
-                onSelected: (v) {
-                  if (v == "logout") _confirmLogout();
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: "logout",
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, size: 18),
-                        SizedBox(width: 8),
-                        Text("Logout"),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 6),
-            ],
           ),
           body: Padding(
             padding: EdgeInsets.all(pad),
@@ -209,7 +126,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                     crossAxisCount: width > 700 ? 3 : 2,
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
-                    childAspectRatio: .60,
+                    clipBehavior: Clip.antiAlias,
                     children: [
                       _ServiceCard(
                         title: "Deep Freezer",
@@ -237,6 +154,18 @@ class _ServicesScreenState extends State<ServicesScreen> {
                         onTap: () =>
                             _chooseAddMethod(context, "WALK_IN_COOLER"),
                       ),
+                      _ServiceCard(
+                        title: "Data Logger ULT",
+                        subtitle: "16 Sensor Monitoring",
+                        icon: Icons.device_thermostat,
+                        onTap: () => _chooseAddMethod(context, "DATA_LOGGER_ULT"),
+                      ),
+                      _ServiceCard(
+                        title: "Active Coolpod",
+                        subtitle: "Portable cooling monitoring",
+                        icon: Icons.ac_unit_outlined,
+                        onTap: () => _chooseAddMethod(context, "ACTIVE_COOLPOD"),
+                      ),
                     ],
                   ),
                 ),
@@ -244,15 +173,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
             ),
           ),
         ),
-
-        /// ⏳ LOGOUT LOADER
-        if (_loggingOut)
-          Container(
-            color: Colors.black.withValues(alpha: 0.45),
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
       ],
     );
   }
@@ -303,12 +223,10 @@ class _ServiceCard extends StatelessWidget {
               Text(title,
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 6),
-              Expanded(
-                child: Text(
+               Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-              ),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.bottomRight,

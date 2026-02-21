@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-
+import '../../features/dashboard/storage/telemetry_store.dart';
 import '../../features/dashboard/models/unified_telemetry.dart';
 import '../../features/dashboard/utils/unified_telemetry_mapper.dart';
 import '../session/session_manager.dart';
+import '../../core/utils/log_safe.dart';
+import '../../features/dashboard/datalogger/models/datalogger_telemetry.dart';
+import '../../features/dashboard/datalogger/utils/datalogger_telemetry_mapper.dart';
 
 class AndroidDataApi {
   static const String _baseUrl =
@@ -17,29 +19,31 @@ class AndroidDataApi {
     final safeId = Uri.encodeQueryComponent(deviceId);
     final url = Uri.parse("$_baseUrl?device_id=$safeId");
 
-    debugPrint("📡 API CALL → $url");
+    logSafe("📡 API CALL → $url");
 
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 8));
 
       if (response.statusCode != 200) {
-        debugPrint("❌ API ERROR ${response.statusCode}");
+        logSafe("❌ API ERROR ${response.statusCode}");
         return null;
       }
 
       final raw = jsonDecode(response.body);
       if (raw is! Map<String, dynamic>) {
-        debugPrint("❌ API RESPONSE FORMAT ERROR");
+        logSafe("❌ API RESPONSE FORMAT ERROR");
         return null;
       }
 
-      debugPrint("RAW API RESPONSE = $raw");
-      debugPrint("latest_v TYPE = ${raw["latest_v"].runtimeType}");
+      logSafe("RAW API RESPONSE = $raw");
+      logSafe("latest_v TYPE = ${raw["latest_v"].runtimeType}");
 
       // 🎯 Convert once only
       final telemetry = UnifiedTelemetryMapper.fromApi(raw);
 
       if (telemetry == null) return null;
+
+      TelemetryStore.set(deviceId, telemetry);
 
       // 🚨 Centralized alert processing
 
@@ -51,11 +55,37 @@ class AndroidDataApi {
         ).catchError((_) {}),
       );
 
-      debugPrint("✅ TELEMETRY OBJECT → ${telemetry.alarm}");
+      logSafe("✅ TELEMETRY OBJECT → ${telemetry.alarm}");
 
       return telemetry;
     } catch (e) {
-      debugPrint("❌ API EXCEPTION $e");
+      logSafe("❌ API EXCEPTION $e");
+      return null;
+    }
+  }
+
+  static Future<DataloggerTelemetry?> fetchDatalogger(String deviceId) async {
+    final raw = await fetchRawByDeviceId(deviceId);
+
+    if (raw == null) return null;
+
+    return DataloggerTelemetryMapper.fromApi(raw);
+  }
+
+  static Future<Map<String, dynamic>?> fetchRawByDeviceId(String deviceId) async {
+    final safeId = Uri.encodeQueryComponent(deviceId);
+    final url = Uri.parse("$_baseUrl?device_id=$safeId");
+
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) return null;
+
+      final raw = jsonDecode(response.body);
+      if (raw is! Map<String, dynamic>) return null;
+
+      return raw;
+    } catch (_) {
       return null;
     }
   }

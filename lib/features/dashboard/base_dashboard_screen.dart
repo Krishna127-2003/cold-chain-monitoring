@@ -9,12 +9,13 @@ import 'widgets/dashboard_top_bar.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'models/unified_telemetry.dart';
 import '../../data/api/immediate_send_api.dart';
-
+import '../dashboard/storage/telemetry_store.dart';
 
 class Pill {
   final String label;
   final String value;
   Pill(this.label, this.value);
+
 }
 
 class BaseDashboardScreen extends StatefulWidget {
@@ -39,8 +40,8 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   Timer? _timer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
-  UnifiedTelemetry? _telemetry;
-  DateTime? _lastSync;
+  UnifiedTelemetry? get _t =>
+    TelemetryStore.get(widget.deviceId);
   bool _initialLoading = true;
   bool _refreshing = false;
   bool _noInternet = false;
@@ -52,18 +53,18 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
   // ================= TIME =================
 
   bool isStale() =>
-    _lastSync == null ||
-    DateTime.now().difference(_lastSync!).inMinutes >
+    _t?.timestamp == null ||
+    DateTime.now().difference(_t!.timestamp!).inMinutes >
         _offlineThresholdMinutes;
   
   bool isOnline() {
-    if (_lastSync == null) return false;
-    return DateTime.now().difference(_lastSync!).inMinutes <=
+    if (_t?.timestamp == null) return false;
+    return DateTime.now().difference(_t!.timestamp!).inMinutes <=
         _offlineThresholdMinutes;
   }
 
   bool get hasNoData =>
-    !_initialLoading  && _telemetry == null && !_noInternet;
+    !_initialLoading && _t == null && !_noInternet;
 
   String _timeAgo(DateTime t) {
     final d = DateTime.now().difference(t);
@@ -95,7 +96,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
     if (isRefresh) {
       _refreshing = true;
-    } else if (_telemetry == null) {
+    } else if (_t?.timestamp == null) {
       _initialLoading = true; // only first load shows CONNECTING
     }
 
@@ -109,8 +110,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
       if (!mounted) return;
 
       if (telemetry != null) {
-        _telemetry = telemetry;
-        _lastSync = telemetry.timestamp;
+       TelemetryStore.set(widget.deviceId, telemetry);
       }
 
       _noInternet = false;
@@ -285,7 +285,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final t = _telemetry;
+    final t = TelemetryStore.get(widget.deviceId);
     final bool connecting = _initialLoading;
     final bool noData = hasNoData;
     final pvText = (t?.pv == null) ? "--.-" : t!.pv!.toStringAsFixed(1);
@@ -394,9 +394,9 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
                             size: 14, color: Colors.white54),
                         const SizedBox(width: 6),
                         Text(
-                          _lastSync == null
+                          _t?.timestamp == null
                               ? "Last sync: Connecting..."
-                              : "Last sync: ${_timeAgo(_lastSync!)}",
+                              : "Last sync: ${_timeAgo(t!.timestamp!)}",
                           style: TextStyle(
                             color: isStale()
                                 ? Colors.orangeAccent

@@ -14,9 +14,12 @@ import '../../data/models/registered_device.dart';
 import '../../data/session/session_manager.dart';
 import 'package:flutter/services.dart';
 
-import '../dashboard/models/unified_telemetry.dart';
 import '../../core/ui/app_toast.dart';
 import '../notifications/alert_manager.dart';
+import 'dart:convert';
+import '../../core/utils/battery_optimization.dart';
+import '../dashboard/storage/telemetry_store.dart';
+import '../../core/utils/battery_prompt_storage.dart';
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -25,16 +28,16 @@ class AllDevicesScreen extends StatefulWidget {
   State<AllDevicesScreen> createState() => _AllDevicesScreenState();
 }
 
-class _AllDevicesScreenState extends State<AllDevicesScreen> {
+class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingObserver {
   List<RegisteredDevice> _devices = [];
   bool _loadingDevices = true;
 
   String _welcomeName = "Guest";
   static const int offlineThresholdMinutes = 16;
-
-
+  Timer? _deviceSyncTimer;
+  String? _lastDeviceSnapshotHash;
   Timer? _tempTimer;
-  final Map<String, UnifiedTelemetry> _telemetryByDevice = {};
+  
   final Set<String> _loadingTempDeviceIds = {};
   bool _tempsLoading = false;
 
@@ -42,19 +45,69 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   @override
   void initState() {
     super.initState();
+
+    checkBatteryPopup();
+    checkBattery();
     _loadWelcomeUser();
     _loadDevices();
+    WidgetsBinding.instance.addObserver(this);
 
     _tempTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => _loadTemps(),
     );
+
+    // 🔁 BACKEND DEVICE SYNC
+    _deviceSyncTimer = Timer.periodic(
+      const Duration(seconds: 75),
+      (_) => _loadDevices(),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tempTimer?.cancel();
     super.dispose();
+    _deviceSyncTimer?.cancel();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadDevices();
+      _tempTimer?.cancel();
+      _tempTimer = Timer.periodic(
+        const Duration(seconds: 60),
+        (_) => _loadTemps(),
+      );
+    }
+
+    if (state == AppLifecycleState.paused) {
+      _tempTimer?.cancel();
+    }
+  }
+
+  Future<void> checkBattery() async {
+    final allowed = await BatteryOptimization.isIgnoringOptimizations();
+    if (!allowed) {
+      await BatteryOptimization.requestDisableOnce();
+    }
+  }
+
+  Future<void> checkBatteryPopup() async {
+
+    final alreadyAsked = await BatteryPromptStorage.wasShown();
+
+    if (alreadyAsked) return;   // 🛑 never ask again
+
+    final ignored = await BatteryOptimization.isIgnoringOptimizations();
+
+    if (!ignored) {
+      await BatteryOptimization.requestDisableOnce();
+    }
+
+    await BatteryPromptStorage.markShown(); // ✅ remember user choice
   }
 
   Future<void> _loadWelcomeUser() async {
@@ -103,6 +156,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
     try {
       final rows = await DeviceManagementApi.listDevices(email);
+      final snapshot = jsonEncode(rows);
+        if (snapshot == _lastDeviceSnapshotHash) {
+          setState(() => _loadingDevices = false);
+          return; // no changes → skip rebuild
+        }
+        _lastDeviceSnapshotHash = snapshot;
+
       final mapped = rows
           .whereType<Map>()
           .map((e) => _mapApiRow(Map<String, dynamic>.from(e), email))
@@ -138,11 +198,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
 
           try {
             final t = await AndroidDataApi.fetchByDeviceId(id);
+
             if (t != null) {
               if (!mounted) return;
 
               setState(() {
-                _telemetryByDevice[id] = t;
+                TelemetryStore.set(id, t);
               });
 
               // 🔔 ALERT ENGINE CALL (SAFE + CLEAN)
@@ -209,19 +270,19 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
   }
 
   bool isDeviceOnline(String id) {
-    final t = _telemetryByDevice[id];
+    final t = TelemetryStore.get(id);
     if (t?.timestamp == null) return false;
     return DateTime.now().difference(t!.timestamp!).inMinutes <= offlineThresholdMinutes;
   }
 
   String _systemStatus(String id) {
-    final t = _telemetryByDevice[id];
+    final t = TelemetryStore.get(id);
     if (t == null) return "--";
     return t.systemHealthy ? "HEALTHY" : "FAILURE";
   }
 
   String? _temp(String id) {
-    final t = _telemetryByDevice[id];
+    final t = TelemetryStore.get(id);
     if (t?.pv == null) return null;
     return t!.pv!.toStringAsFixed(1);
   }
@@ -336,10 +397,16 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
         title: SvgPicture.asset("assets/images/marken_logo.svg", height: 34),
         actions: [
           IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.alertHistory);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _confirmLogout,
           ),
-        ], 
+        ],
       ),
 
       floatingActionButton: FloatingActionButton(
@@ -387,7 +454,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen> {
                           itemBuilder: (_, i) {
                             final d = devices[i];
                             final id = d.deviceId.trim();
-                            final telemetry = _telemetryByDevice[id];
+                            final telemetry = TelemetryStore.get(id);
                             final loading = _loadingTempDeviceIds.contains(id);
 
                             return Padding(

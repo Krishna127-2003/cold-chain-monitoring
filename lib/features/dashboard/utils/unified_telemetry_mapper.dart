@@ -1,16 +1,15 @@
   import 'dart:convert';
   import '../models/unified_telemetry.dart';
-  import 'package:flutter/foundation.dart';
-
+  import '../../../core/utils/log_safe.dart';
 
   class UnifiedTelemetryMapper {
   static bool bit(int v, int b) => ((v >> b) & 1) == 1;
 
   static UnifiedTelemetry? fromApi(Map<String, dynamic> raw) {
 
-    debugPrint("MAPPER RAW = $raw");
-    debugPrint("MAPPER latest_v = ${raw["latest_v"]}");
-    debugPrint("MAPPER latest_v TYPE = ${raw["latest_v"].runtimeType}");
+    logSafe("MAPPER RAW = $raw");
+    logSafe("MAPPER latest_v = ${raw["latest_v"]}");
+    logSafe("MAPPER latest_v TYPE = ${raw["latest_v"].runtimeType}");
 
     dynamic latest = raw["latest_v"];
     if (latest == null) return null;

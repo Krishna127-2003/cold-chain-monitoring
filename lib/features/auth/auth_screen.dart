@@ -10,7 +10,6 @@ import '../../core/utils/responsive.dart';
 import '../../routes/app_routes.dart';
 import 'google_auth_service.dart';
 import '../../data/session/session_manager.dart'; // ✅ NEW
-import '../../data/sync/device_sync_service.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
 import '../../data/api/user_info_api.dart';
@@ -136,11 +135,6 @@ class _AuthScreenState extends State<AuthScreen>
       await SessionManager.saveLogin(
         loginType: "google",
         email: email,
-      );
-
-      await DeviceSyncService.syncFromBackend(
-        email: email,
-        loginType: "google",
       );
 
       await _deviceRepo.getRegisteredDevices(

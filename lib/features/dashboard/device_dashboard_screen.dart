@@ -4,6 +4,8 @@ import 'deep_freezer_dashboard_screen.dart';
 import 'bbr_dashboard_screen.dart';
 import 'pai_dashboard_screen.dart';
 import 'wic_dashboard_screen.dart';
+import 'datalogger_dashboard_screen.dart';
+import 'coolpod_dashboard_screen.dart';
 
 class DeviceDashboardScreen extends StatelessWidget {
   final String deviceId;
@@ -33,6 +35,12 @@ class DeviceDashboardScreen extends StatelessWidget {
 
       case "WALK_IN_COOLER":
         return WicDashboardScreen(deviceId: activeDeviceId);
+
+      case "DATA_LOGGER_ULT":
+        return DataLoggerDashboardScreen(deviceId: activeDeviceId);
+      
+      case "ACTIVE_COOLPOD":
+        return CoolpodDashboardScreen(deviceId: activeDeviceId);
 
       default:
         return Scaffold(

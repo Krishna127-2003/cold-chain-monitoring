@@ -12,7 +12,7 @@
       as mlkit;
 
   import '../../dashboard/utils/device_id_helper.dart';
-
+  import '../../../core/utils/log_safe.dart';
 
   class QrScanScreen extends StatefulWidget {
     const QrScanScreen({super.key});
@@ -61,7 +61,7 @@
     String? _extractDeviceId(String raw) {
       final value = raw.trim();
 
-      debugPrint("📸 QR RAW VALUE: $value");
+      logSafe("📸 QR RAW VALUE: $value");
 
       // 1️⃣ Try URL param first
       try {

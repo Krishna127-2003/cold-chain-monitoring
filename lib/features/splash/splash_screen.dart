@@ -2,11 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
+import '../../core/utils/log_safe.dart';
 import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
 import '../../data/session/session_manager.dart';
-import '../../data/sync/device_sync_service.dart';
 import '../../routes/app_routes.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -76,17 +75,12 @@ class _SplashScreenState extends State<SplashScreen>
         _go(AppRoutes.allDevices);
         if (localDevices.isNotEmpty) {
           // Keep existing behavior (route unchanged), useful log retained.
-          print('Guest devices found: ${localDevices.length}');
+          logSafe('Guest devices found: ${localDevices.length}');
         }
         return;
       }
 
       if (loginType == 'google' && email != null) {
-        await DeviceSyncService.syncFromBackend(
-          email: email,
-          loginType: loginType,
-        );
-
         final localDevices = await _deviceRepo.getRegisteredDevices(
           email: email,
           loginType: loginType,
@@ -95,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
         if (!mounted) return;
         _go(AppRoutes.allDevices);
         if (localDevices.isNotEmpty) {
-          print('Google devices found: ${localDevices.length}');
+          logSafe('Google devices found: ${localDevices.length}');
         }
         return;
       }

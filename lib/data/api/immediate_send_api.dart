@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_print
 import 'package:http/http.dart' as http;
 import '../storage/secure_store.dart';
+import '../../core/utils/log_safe.dart';
 
 class ImmediateSendApi {
   static final SecureStore _secureStore = SecureStore();
@@ -26,12 +27,12 @@ class ImmediateSendApi {
           .timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
-        print("⚡ Live data triggered for device $deviceId");
+        logSafe("⚡ Live data triggered for device $deviceId");
       } else {
-        print("⚠️ ImmediateSend failed: ${res.statusCode}");
+        logSafe("⚠️ ImmediateSend failed: ${res.statusCode}");
       }
     } catch (e) {
-      print("⚠️ ImmediateSend error: $e");
+      logSafe("⚠️ ImmediateSend error: $e");
     }
   }
 }

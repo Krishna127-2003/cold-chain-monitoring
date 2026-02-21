@@ -2,7 +2,7 @@
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.23.0+18
+version: 1.25.0+20
 
 environment:
   sdk: ^3.10.4
@@ -27,7 +27,7 @@ dependencies:
   connectivity_plus: ^7.0.0
   crypto: ^3.0.6
   fluttertoast: ^8.2.4
-
+  workmanager: ^0.6.0
 
   
 dev_dependencies:
@@ -45,6 +45,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icon/
+    - assets/images/diagnose.png
 
 # âœ… App Icon Config (ONLY ICON)
 flutter_launcher_icons:
