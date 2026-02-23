@@ -14,6 +14,7 @@ class WicDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BaseDashboardScreen(
       deviceId: deviceId,
+      equipmentType: "WALK_IN_COOLER",
       title: "WALK-IN COOLER",
       buildPills: (UnifiedTelemetry t) => [
         Pill("COMPRESSOR 1", t.compressor1 ? "ON" : "OFF"),

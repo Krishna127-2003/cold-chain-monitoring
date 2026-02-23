@@ -14,6 +14,7 @@ class CoolpodDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BaseDashboardScreen(
       deviceId: deviceId,
+      equipmentType: "ACTIVE_COOLPOD",
       title: "ACTIVE COOLPOD",
       buildPills: (UnifiedTelemetry t) => [
         Pill("POWER", t.powerOn ? "ON" : "OFF"),

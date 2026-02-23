@@ -67,7 +67,7 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: true,
 
       actions: [
-        if (deviceId != null)
+        if (deviceId != null && deviceId!.isNotEmpty)
           IconButton(
             icon: const Icon(
               Icons.download_rounded,
@@ -76,10 +76,18 @@ class DashboardTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             tooltip: "Download Data Log",
             onPressed: () {
+              if (deviceId == null ||
+                  deviceId!.isEmpty) {
+                return;
+              }
+
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => DownloadPdfScreen(deviceId: deviceId!),
+                  builder: (_) => DownloadPdfScreen(
+                    deviceId: deviceId!,
+                    serviceType: equipmentType ?? '',
+                  ),
                 ),
               );
             },

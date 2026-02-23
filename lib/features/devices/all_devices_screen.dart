@@ -20,6 +20,7 @@ import 'dart:convert';
 import '../../core/utils/battery_optimization.dart';
 import '../dashboard/storage/telemetry_store.dart';
 import '../../core/utils/battery_prompt_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
@@ -108,6 +109,30 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
     }
 
     await BatteryPromptStorage.markShown(); // ✅ remember user choice
+  }
+
+  Future<void> _sendForgotPinEmail(RegisteredDevice device) async {
+    final email = await SessionManager.getEmail() ?? "unknown";
+
+    final subject = "Forgot Device PIN – ${device.deviceId}";
+
+    final body = "User Email: $email\n"
+        "Device ID: ${device.deviceId}\n"
+        "Device Type: ${device.serviceType}\n"
+        "Department: ${device.department}\n"
+        "Area: ${device.area}\n"
+        "\n"
+        "Request Time: ${DateTime.now()}\n"
+        "\n"
+        "Please assist in retrieving or resetting the device PIN.";
+
+    final uri = Uri.parse(
+      'mailto:IotAppSupport@markenworld.com'
+      '?subject=${Uri.encodeComponent(subject)}'
+      '&body=${Uri.encodeComponent(body)}',
+    );
+
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _loadWelcomeUser() async {
@@ -228,7 +253,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
     }
   }
 
-  Future<String?> _askPin(String deviceId) async {
+  Future<String?> _askPin(RegisteredDevice device) async {
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -240,7 +265,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Device: $deviceId"),
+              Text("Device: ${device.deviceId}"),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -248,6 +273,20 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: "Enter 4-digit PIN",
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _sendForgotPinEmail(device);
+                  },
+                  child: const Text(
+                    "Forgot PIN?",
+                    style: TextStyle(color: Colors.blue),
+                  ),
                 ),
               ),
             ],
@@ -356,7 +395,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                 title: const Text("Delete Device"),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  final pin = await _askPin(device.deviceId);
+                  final pin = await _askPin(device);
                   if (pin == null || pin.isEmpty) return;
 
                   final email = await SessionManager.getEmail();

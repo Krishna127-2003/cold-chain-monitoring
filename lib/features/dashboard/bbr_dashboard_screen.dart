@@ -14,6 +14,7 @@ class BbrDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BaseDashboardScreen(
       deviceId: deviceId,
+      equipmentType: "BBR",
       title: "BLOOD BAG REFRIGERATOR",
       buildPills: (UnifiedTelemetry t) => [
         Pill("POWER", t.powerOn ? "ON" : "OFF"),

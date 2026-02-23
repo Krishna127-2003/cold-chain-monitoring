@@ -3,8 +3,9 @@ import '../../data/api/pdf_download_api.dart';
 
 class DownloadPdfScreen extends StatefulWidget {
   final String deviceId;
+  final String serviceType;
 
-  const DownloadPdfScreen({super.key, required this.deviceId});
+  const DownloadPdfScreen({super.key, required this.deviceId, required this.serviceType,});
 
   @override
   State<DownloadPdfScreen> createState() => _DownloadPdfScreenState();
@@ -167,6 +168,7 @@ class _DownloadPdfScreenState extends State<DownloadPdfScreen> {
                 try {
                   await PdfDownloadApi.downloadPdf(
                     deviceId: widget.deviceId,
+                    serviceType: widget.serviceType, // 👈 pass this
                     startDate: _startDate!,
                     endDate: _endDate!,
                   );

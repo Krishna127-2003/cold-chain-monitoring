@@ -14,6 +14,7 @@ class DeepFreezerDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BaseDashboardScreen(
       deviceId: deviceId,
+      equipmentType: "DEEP_FREEZER",
       title: "DEEP FREEZER -40°C",
       buildPills: (UnifiedTelemetry t) => [
         Pill("POWER", t.powerOn ? "ON" : "OFF"),

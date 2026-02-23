@@ -21,11 +21,13 @@ class Pill {
 class BaseDashboardScreen extends StatefulWidget {
   final String deviceId;
   final String title;
+  final String equipmentType;
   final List<Pill> Function(UnifiedTelemetry t) buildPills;
 
   const BaseDashboardScreen({
     super.key,
     required this.deviceId,
+    required this.equipmentType,
     required this.title,
     required this.buildPills,
   });
@@ -295,7 +297,8 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
       return Scaffold(
         backgroundColor: const Color(0xFF0A1020),
         appBar: DashboardTopBar(
-          deviceId: widget.deviceId,
+          deviceId: widget.deviceId,  
+          equipmentType: widget.equipmentType,
           powerText: "Power: --",
           batteryText: "--%",
         ),
@@ -325,6 +328,7 @@ class _BaseDashboardScreenState extends State<BaseDashboardScreen>
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
         deviceId: widget.deviceId,
+        equipmentType: widget.equipmentType,
         powerText: (connecting || noData)
             ? "Power: --"
             : "Power: ${t!.powerOn ? "ON" : "OFF"}",

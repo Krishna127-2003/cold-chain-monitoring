@@ -331,22 +331,22 @@ class _DataLoggerDashboardScreenState
     const lpl = Color(0xFF44DD88);   // green  — low pressure liquid
 
     return [
-      _point(t[0],  lp,  top: h * 0.035, left: w * 0.295),        // ① compressor inlet (blue)
+      _point(t[0],  lp,  top: h * 0.035, left: w * 0.192),      // ① compressor inlet (blue)
       _point(t[1],  hp,  top: h * 0.035, left: w * 0.4),        // ② compressor outlet
-      _point(t[2],  hp,  top: h * 0.035, left: w * 0.63),        // ③ discharge line
-      _point(t[3],  hpl, top: h * 0.148, right: w * 0.18),       // ④ condenser right liquid
-      _point(t[4],  hp,  top: h * 0.23, left: w * 0.315),        // ⑤ heat exchanger bottom
-      _point(t[5],  lp,  top: h * 0.272, left: w * 0.03),        // ⑥ left blue line
-      _point(t[6],  lp,  top: h * 0.275, left: w * 0.735),        // ⑦ LT compressor right
-      _point(t[7],  hp,  top: h * 0.255, left: w * 0.655),        // ⑧ above R-404A
-      _point(t[8],  hp,  top: h * 0.333, left: w * 0.38),        // ⑨ oil separator
-      _point(t[9],  lpl, top: h * 0.18, left: w * 0.26),        // ⑩ heat exchanger top
-      _point(t[10], hpl, top: h * 0.371, left: w * 0.175),        // ⑪ left yellow lower
-      _point(t[11], lpl, top: h * 0.436, left: w * 0.36),        // ⑫ expansion valve lower
-      _point(t[12], lp,  top: h * 0.433, right: w * 0.018),       // ⑬ PG1 right side
-      _point(t[13], lpl, top: h * 0.49, right: w * 0.14),        // ⑭ evaporator inside
-      _point(t[14], lpl, top: h * 0.54, right: w * 0.04),       // ⑮ evaporator bottom right
-      _point(t[15], hpl, top: h * 0.51, right: w * 0.83),        // ⑯ bottom left
+      _point(t[2],  hp,  top: h * 0.035, left: w * 0.63),       // ③ discharge line
+      _point(t[3],  hpl, top: h * 0.148, right: w * 0.18),      // ④ condenser right liquid
+      _point(t[4],  hp,  top: h * 0.23, left: w * 0.3),       // ⑤ heat exchanger bottom
+      _point(t[5],  lp,  top: h * 0.282, left: w * 0.07),       // ⑥ left blue line
+      _point(t[6],  lp,  top: h * 0.275, left: w * 0.735),      // ⑦ LT compressor right
+      _point(t[7],  hp,  top: h * 0.255, left: w * 0.655),      // ⑧ above R-404A
+      _point(t[8],  hp,  top: h * 0.33, left: w * 0.38),       // ⑨ oil separator
+      _point(t[9],  lpl, top: h * 0.177, left: w * 0.26),        // ⑩ heat exchanger top
+      _point(t[10], hpl, top: h * 0.368, left: w * 0.296),      // ⑪ left yellow lower
+      _point(t[11], lpl, top: h * 0.416, left: w * 0.4),       // ⑫ expansion valve lower
+      _point(t[12], lp,  top: h * 0.433, right: w * 0.018),     // ⑬ PG1 right side
+      _point(t[13], lpl, top: h * 0.489, right: w * 0.109),     // ⑭ evaporator inside
+      _point(t[14], lpl, top: h * 0.554, right: w * 0.07),      // ⑮ evaporator bottom right
+      _point(t[15], hpl, top: h * 0.49, right: w * 0.88),       // ⑯ bottom left
     ];
   }
 
@@ -391,6 +391,7 @@ class _DataLoggerDashboardScreenState
       backgroundColor: const Color(0xFF0A1020),
       appBar: DashboardTopBar(
         deviceId: widget.deviceId,
+        equipmentType: "DATA_LOGGER_ULT",
         powerText: "LOGGER",
         batteryText: isOnline ? "Online" : "Offline",
       ),

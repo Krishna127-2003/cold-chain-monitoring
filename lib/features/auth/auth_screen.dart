@@ -170,8 +170,10 @@ class _AuthScreenState extends State<AuthScreen>
     if (!mounted) return;
 
     final guestBackendId =
-        "guest_${DateTime.now().millisecondsSinceEpoch}";
+        "guest_${DateTime.now().millisecondsSinceEpoch}@markenworld.com";
 
+        debugPrint("Guest email being sent: $guestBackendId");
+        
     try {
       final exists = await UserInfoApi.doesUserExist(guestBackendId);
 

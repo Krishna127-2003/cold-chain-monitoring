@@ -14,6 +14,7 @@ class PaiDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BaseDashboardScreen(
       deviceId: deviceId,
+      equipmentType: "PLATELET",
       title: "PLATELET AGITATOR INCUBATOR",
       buildPills: (UnifiedTelemetry t) => [
         Pill("POWER", t.powerOn ? "ON" : "OFF"),
