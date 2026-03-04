@@ -19,7 +19,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.marken.coldchain"
-    compileSdk = 36
+    compileSdk = 35
     ndkVersion = "28.0.13004108"
 
 
@@ -36,7 +36,7 @@ android {
     defaultConfig {
         applicationId = "com.marken.coldchain"
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = 35
 
         // ðŸ”¼ CHANGE THIS EVERY RELEASE
         versionCode = flutter.versionCode
