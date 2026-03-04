@@ -46,17 +46,23 @@ class DefaultFirebaseOptions {
 
   // Optional (not needed now)
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: "dummy",
-    appId: "dummy",
-    messagingSenderId: "dummy",
-    projectId: "dummy",
+    apiKey: "AIzaSyCFFfYKcZ4mKTiEjiTQFI2TBDv7jYFgxlw",                    // API_KEY from plist
+    appId: "1:653168096175:ios:068c68f9b480898ec1f55a",              // GOOGLE_APP_ID from plist
+    messagingSenderId: "653168096175",  // GCM_SENDER_ID from plist
+    projectId: "cold-chain-monitor-v1",             // PROJECT_ID from plist
+    storageBucket: "cold-chain-monitor-v1.firebasestorage.app",     // STORAGE_BUCKET from plist
+    iosClientId: "653168096175-0ebb60n39if5jb7vmhmch980ec6hsfms.apps.googleusercontent.com",            // CLIENT_ID from plist
+    iosBundleId: "com.marken.coldchain",      // BUNDLE_ID from plist
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: "dummy",
-    appId: "dummy",
-    messagingSenderId: "dummy",
-    projectId: "dummy",
+    apiKey: "AIzaSyCFFfYKcZ4mKTiEjiTQFI2TBDv7jYFgxlw",
+    appId: "1:653168096175:ios:068c68f9b480898ec1f55a",
+    messagingSenderId: "653168096175",
+    projectId: "cold-chain-monitor-v1",
+    storageBucket: "cold-chain-monitor-v1.firebasestorage.app",
+    iosClientId: "653168096175-0ebb60n39if5jb7vmhmch980ec6hsfms.apps.googleusercontent.com",
+    iosBundleId: "com.marken.coldchain",
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
