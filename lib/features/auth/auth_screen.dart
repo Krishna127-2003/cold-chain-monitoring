@@ -14,7 +14,7 @@ import '../../data/repository/device_repository.dart';
 import '../../data/repository_impl/local_device_repository.dart';
 import '../../data/api/user_info_api.dart';
 import 'privacy_policy_screen.dart';
-
+import 'email_auth_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -374,6 +374,25 @@ class _AuthScreenState extends State<AuthScreen>
                                           ),
                                           filled: false,
                                           
+                                        ),
+
+                                        const SizedBox(height: 12),
+                                        _AuthButton(
+                                          text: "Continue with Email",
+                                          loading: false,
+                                          onPressed: _loadingGoogle || _loadingGuest ? null : () {
+                                            if (!acceptedPolicy) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text("Please accept Privacy Policy to continue")),
+                                              );
+                                              return;
+                                            }
+                                            Navigator.push(context, MaterialPageRoute(
+                                              builder: (_) => const EmailAuthScreen(),
+                                            ));
+                                          },
+                                          icon: const Icon(Icons.email_outlined, size: 22, color: Color(0xFF0F172A)),
+                                          filled: false,
                                         ),
 
                                         const SizedBox(height: 14),
