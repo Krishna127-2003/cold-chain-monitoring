@@ -22,6 +22,11 @@ import '../dashboard/storage/telemetry_store.dart';
 import '../../core/utils/battery_prompt_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// ✅ NEW IMPORTS
+import 'storage/datalogger_temp_store.dart';
+import 'storage/selected_sensors_storage.dart';
+import '../dashboard/storage/sensor_name_storage.dart';
+
 class AllDevicesScreen extends StatefulWidget {
   const AllDevicesScreen({super.key});
 
@@ -29,7 +34,8 @@ class AllDevicesScreen extends StatefulWidget {
   State<AllDevicesScreen> createState() => _AllDevicesScreenState();
 }
 
-class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingObserver {
+class _AllDevicesScreenState extends State<AllDevicesScreen>
+    with WidgetsBindingObserver {
   List<RegisteredDevice> _devices = [];
   bool _loadingDevices = true;
 
@@ -38,10 +44,12 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
   Timer? _deviceSyncTimer;
   String? _lastDeviceSnapshotHash;
   Timer? _tempTimer;
-  
+
   final Set<String> _loadingTempDeviceIds = {};
   bool _tempsLoading = false;
 
+  // ✅ Selected sensors per datalogger device
+  final Map<String, List<int>> _selectedSensors = {};
 
   @override
   void initState() {
@@ -58,7 +66,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
       (_) => _loadTemps(),
     );
 
-    // 🔁 BACKEND DEVICE SYNC
     _deviceSyncTimer = Timer.periodic(
       const Duration(seconds: 75),
       (_) => _loadDevices(),
@@ -69,8 +76,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _tempTimer?.cancel();
-    super.dispose();
     _deviceSyncTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -97,25 +104,21 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
   }
 
   Future<void> checkBatteryPopup() async {
-
     final alreadyAsked = await BatteryPromptStorage.wasShown();
-
-    if (alreadyAsked) return;   // 🛑 never ask again
+    if (alreadyAsked) return;
 
     final ignored = await BatteryOptimization.isIgnoringOptimizations();
-
     if (!ignored) {
       await BatteryOptimization.requestDisableOnce();
     }
 
-    await BatteryPromptStorage.markShown(); // ✅ remember user choice
+    await BatteryPromptStorage.markShown();
   }
 
   Future<void> _sendForgotPinEmail(RegisteredDevice device) async {
     final email = await SessionManager.getEmail() ?? "unknown";
 
     final subject = "Forgot Device PIN – ${device.deviceId}";
-
     final body = "User Email: $email\n"
         "Device ID: ${device.deviceId}\n"
         "Device Type: ${device.serviceType}\n"
@@ -182,11 +185,11 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
     try {
       final rows = await DeviceManagementApi.listDevices(email);
       final snapshot = jsonEncode(rows);
-        if (snapshot == _lastDeviceSnapshotHash) {
-          setState(() => _loadingDevices = false);
-          return; // no changes → skip rebuild
-        }
-        _lastDeviceSnapshotHash = snapshot;
+      if (snapshot == _lastDeviceSnapshotHash) {
+        setState(() => _loadingDevices = false);
+        return;
+      }
+      _lastDeviceSnapshotHash = snapshot;
 
       final mapped = rows
           .whereType<Map>()
@@ -199,9 +202,23 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
         _loadingDevices = false;
       });
 
+      // ✅ Load selected sensors for dataloggers
+      await _loadSelectedSensors();
       await _loadTemps();
     } catch (_) {
       setState(() => _loadingDevices = false);
+    }
+  }
+
+  // ✅ Load persisted sensor selections for all datalogger devices
+  Future<void> _loadSelectedSensors() async {
+    for (final d in _devices) {
+      if (d.serviceType == 'DATA_LOGGER_ULT') {
+        final indices = await SelectedSensorsStorage.load(d.deviceId);
+        if (mounted) {
+          setState(() => _selectedSensors[d.deviceId] = indices);
+        }
+      }
     }
   }
 
@@ -222,26 +239,39 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
           final id = device.deviceId.trim();
 
           try {
-            final t = await AndroidDataApi.fetchByDeviceId(id);
+            if (device.serviceType == 'DATA_LOGGER_ULT') {
+              // ✅ Datalogger: fetch 16-sensor data
+              final t = await AndroidDataApi.fetchDatalogger(id);
+              if (t != null) {
+                DataloggerTempStore.set(id, t.temps);
+                if (!_selectedSensors.containsKey(id)) {
+                  final indices = await SelectedSensorsStorage.load(id);
+                  if (mounted) {
+                    setState(() => _selectedSensors[id] = indices);
+                  }
+                }
+                if (mounted) setState(() {});
+              }
+            } else {
+              // ✅ Normal device: existing logic
+              final t = await AndroidDataApi.fetchByDeviceId(id);
+              if (t != null) {
+                if (!mounted) return;
+                setState(() {
+                  TelemetryStore.set(id, t);
+                });
 
-            if (t != null) {
-              if (!mounted) return;
-
-              setState(() {
-                TelemetryStore.set(id, t);
-              });
-
-              // 🔔 ALERT ENGINE CALL (SAFE + CLEAN)
-              await AlertManager.handleTelemetry(
-                deviceId: id,
-                equipmentType: device.serviceType,
-                temperature: t.pv,
-                sv: t.sv,
-                batteryPercent: t.battery,
-                powerFail: !t.powerOn,
-                probeFail: !t.probeOk,
-                systemError: !t.systemHealthy,
-              );
+                await AlertManager.handleTelemetry(
+                  deviceId: id,
+                  equipmentType: device.serviceType,
+                  temperature: t.pv,
+                  sv: t.sv,
+                  batteryPercent: t.battery,
+                  powerFail: !t.powerOn,
+                  probeFail: !t.probeOk,
+                  systemError: !t.systemHealthy,
+                );
+              }
             }
           } catch (_) {}
 
@@ -311,7 +341,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
   bool isDeviceOnline(String id) {
     final t = TelemetryStore.get(id);
     if (t?.timestamp == null) return false;
-    return DateTime.now().difference(t!.timestamp!).inMinutes <= offlineThresholdMinutes;
+    return DateTime.now().difference(t!.timestamp!).inMinutes <=
+        offlineThresholdMinutes;
   }
 
   String _systemStatus(String id) {
@@ -376,15 +407,13 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
               ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text("Edit Device"),
-                onTap: () async {   // ✅ ADD ASYNC HERE
+                onTap: () async {
                   Navigator.pop(ctx);
-
                   final updated = await Navigator.pushNamed(
                     context,
                     AppRoutes.editDevice,
                     arguments: device,
                   );
-
                   if (updated == true) {
                     await _loadDevices();
                   }
@@ -423,6 +452,128 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
     );
   }
 
+  // ✅ Datalogger temp row — shows selected sensors or prompt to select
+  Widget _dataloggerTempRow(String deviceId, bool loading) {
+    final selected = _selectedSensors[deviceId] ?? [];
+    final temps = DataloggerTempStore.get(deviceId);
+
+    if (loading && temps == null) {
+      return const Text(
+        "Temp: loading...",
+        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+      );
+    }
+
+    if (selected.isEmpty) {
+      return GestureDetector(
+        onTap: () => _selectSensors(deviceId),
+        child: Row(
+          children: const [
+            Icon(Icons.touch_app, size: 14, color: Colors.blue),
+            SizedBox(width: 4),
+            Text(
+              "Tap to select sensors",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.blue,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final parts = selected.map((i) {
+      final val = (temps != null && i < temps.length) ? temps[i] : null;
+      final label = "S${i + 1}";
+      final valStr = val != null ? "${val.toStringAsFixed(1)}°C" : "--°C";
+      return "$label: $valStr";
+    }).join("   |   ");
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            parts,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _selectSensors(deviceId),
+          child: const Padding(
+            padding: EdgeInsets.only(left: 4),
+            child: Icon(Icons.edit, size: 14, color: Colors.grey),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ✅ Dialog to pick up to 2 sensors
+  Future<void> _selectSensors(String deviceId) async {
+    final names = await Future.wait(
+      List.generate(16, (i) => SensorNameStorage.getName(deviceId, i + 1)),
+    );
+
+    final current = List<int>.from(_selectedSensors[deviceId] ?? []);
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDlg) => AlertDialog(
+            title: const Text("Select up to 2 sensors"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: 16,
+                itemBuilder: (_, i) {
+                  final isSelected = current.contains(i);
+                  return CheckboxListTile(
+                    dense: true,
+                    title: Text("${i + 1}. ${names[i]}"),
+                    value: isSelected,
+                    onChanged: (v) {
+                      setDlg(() {
+                        if (v == true) {
+                          if (current.length < 2) current.add(i);
+                        } else {
+                          current.remove(i);
+                        }
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await SelectedSensorsStorage.save(deviceId, current);
+                  if (mounted) {
+                    setState(() => _selectedSensors[deviceId] = List.from(current));
+                  }
+                  if (ctx.mounted) Navigator.pop(ctx);
+                },
+                child: const Text("Save"),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +623,6 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                   .headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w900),
             ),
-
             Text(
               "Welcome, $_welcomeName",
               textAlign: TextAlign.center,
@@ -495,6 +645,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                             final id = d.deviceId.trim();
                             final telemetry = TelemetryStore.get(id);
                             final loading = _loadingTempDeviceIds.contains(id);
+                            final isDataLogger =
+                                d.serviceType == 'DATA_LOGGER_ULT';
 
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -559,18 +711,24 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                                                   Row(
                                                     children: [
                                                       _StatusChip(
-                                                        status: _systemStatus(id),
+                                                        status:
+                                                            _systemStatus(id),
                                                       ),
                                                       const SizedBox(width: 6),
                                                       IconButton(
-                                                        icon: const Icon(Icons.notifications_active_outlined, size: 20),
+                                                        icon: const Icon(
+                                                          Icons.notifications_active_outlined,
+                                                          size: 20,
+                                                        ),
                                                         onPressed: () {
                                                           Navigator.pushNamed(
                                                             context,
-                                                            AppRoutes.notificationSettings,
+                                                            AppRoutes
+                                                                .notificationSettings,
                                                             arguments: {
                                                               "deviceId": id,
-                                                              "equipmentType": d.serviceType,
+                                                              "equipmentType":
+                                                                  d.serviceType,
                                                             },
                                                           );
                                                         },
@@ -583,7 +741,9 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                                                 [
                                                   d.displayName,
                                                   d.department,
-                                                  if (d.area.trim().isNotEmpty && d.area != "Unknown") d.area,
+                                                  if (d.area.trim().isNotEmpty &&
+                                                      d.area != "Unknown")
+                                                    d.area,
                                                 ].join(" • "),
                                               ),
                                               Text(
@@ -594,29 +754,44 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
                                                     .bodySmall,
                                               ),
                                               const SizedBox(height: 6),
+
+                                              // ✅ TEMP ROW — datalogger vs normal
                                               Row(
                                                 children: [
-                                                  Text(
-                                                    loading && telemetry == null
-                                                        ? "Temp: loading..."
-                                                        : telemetry == null
-                                                            ? "No data available"
-                                                            : "Temp: ${_temp(id)} °C",
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: telemetry == null
-                                                          ? Colors.grey
-                                                          : Theme.of(context)
-                                                              .colorScheme
-                                                              .primary,
+                                                  if (isDataLogger)
+                                                    Expanded(
+                                                      child: _dataloggerTempRow(
+                                                          id, loading),
+                                                    )
+                                                  else
+                                                    Text(
+                                                      loading &&
+                                                              telemetry == null
+                                                          ? "Temp: loading..."
+                                                          : telemetry == null
+                                                              ? "No data available"
+                                                              : "Temp: ${_temp(id)} °C",
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: telemetry == null
+                                                            ? Colors.grey
+                                                            : Theme.of(context)
+                                                                .colorScheme
+                                                                .primary,
+                                                      ),
                                                     ),
-                                                  ),
                                                   const SizedBox(width: 8),
-                                                  if (telemetry != null)
+                                                  // Online badge
+                                                  if (isDataLogger)
                                                     _onlineBadge(
-                                                      isDeviceOnline(id),
-                                                    ),
+                                                      DataloggerTempStore.get(
+                                                              id) !=
+                                                          null,
+                                                    )
+                                                  else if (telemetry != null)
+                                                    _onlineBadge(
+                                                        isDeviceOnline(id)),
                                                 ],
                                               ),
                                             ],
@@ -649,7 +824,8 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>with WidgetsBindingO
       ),
       child: Row(
         children: [
-          Icon(Icons.circle, size: 7, color: online ? Colors.green : Colors.red),
+          Icon(Icons.circle,
+              size: 7, color: online ? Colors.green : Colors.red),
           const SizedBox(width: 4),
           Text(
             online ? "Online" : "Offline",
@@ -719,7 +895,8 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         status,
-        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: c),
+        style: TextStyle(
+            fontSize: 11.5, fontWeight: FontWeight.w800, color: c),
       ),
     );
   }

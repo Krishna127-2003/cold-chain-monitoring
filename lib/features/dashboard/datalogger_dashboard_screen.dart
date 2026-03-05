@@ -11,6 +11,9 @@ import 'widgets/dashboard_top_bar.dart';
 import '../dashboard/storage/telemetry_store.dart';
 import '../dashboard/models/unified_telemetry.dart';
 
+// ✅ NEW IMPORT
+import '../devices/storage/datalogger_temp_store.dart';
+
 class DataLoggerDashboardScreen extends StatefulWidget {
   final String deviceId;
 
@@ -36,9 +39,9 @@ class _DataLoggerDashboardScreenState
   bool _initialLoading = true;
   bool _refreshing = false;
   bool _noInternet = false;
-  
- UnifiedTelemetry? get _storeTelemetry =>
-    TelemetryStore.get(widget.deviceId);
+
+  UnifiedTelemetry? get _storeTelemetry =>
+      TelemetryStore.get(widget.deviceId);
   DateTime? _lastManualRefresh;
   late AnimationController _refreshController;
 
@@ -46,9 +49,6 @@ class _DataLoggerDashboardScreenState
 
   final List<String> _names =
       List.generate(16, (i) => "Temp Sensor ${i + 1}");
-
-  // ===================== TIME =====================
-
 
   bool get isOnline {
     final t = _storeTelemetry;
@@ -70,15 +70,12 @@ class _DataLoggerDashboardScreenState
 
   String _timeAgo(DateTime t) {
     final d = DateTime.now().difference(t);
-
     if (d.inSeconds < 50) return "a few seconds ago";
     if (d.inSeconds < 60) return "1 min ago";
     if (d.inMinutes < 60) return "${d.inMinutes} min ago";
     if (d.inHours < 24) return "${d.inHours} hrs ago";
     return "${d.inDays} days ago";
   }
-
-  // ===================== FETCH =====================
 
   Future<void> _fetch({bool isRefresh = false}) async {
     if (_refreshing) return;
@@ -105,6 +102,9 @@ class _DataLoggerDashboardScreenState
           widget.deviceId,
           UnifiedTelemetry.fromLogger(widget.deviceId, data),
         );
+
+        // ✅ Update shared store so AllDevicesScreen shows fresh temps
+        DataloggerTempStore.set(widget.deviceId, data.temps);
       }
 
       _noInternet = false;
@@ -125,7 +125,7 @@ class _DataLoggerDashboardScreenState
       context: context,
       builder: (_) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,  // full width dialog
+        insetPadding: EdgeInsets.zero,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: InteractiveViewer(
@@ -190,8 +190,6 @@ class _DataLoggerDashboardScreenState
     _refreshController.reset();
   }
 
-  // ===================== SENSOR NAMES =====================
-
   Future<void> _loadNames() async {
     for (int i = 0; i < 16; i++) {
       _names[i] =
@@ -234,8 +232,6 @@ class _DataLoggerDashboardScreenState
     setState(() => _names[index] = result);
   }
 
-  // ===================== INIT =====================
-
   @override
   void initState() {
     super.initState();
@@ -270,8 +266,6 @@ class _DataLoggerDashboardScreenState
     _refreshController.dispose();
     super.dispose();
   }
-
-  // ===================== UI =====================
 
   Widget glassPill(String label, String value, VoidCallback onLongPress) {
     return GestureDetector(
@@ -325,35 +319,34 @@ class _DataLoggerDashboardScreenState
   }
 
   List<Widget> _buildTempPoints(List<double?> t, double w, double h) {
-    const hp  = Color(0xFFFF6600);   // orange — high pressure gas
-    const hpl = Color(0xFFFFCC00);   // yellow — high pressure liquid
-    const lp  = Color(0xFF44AAFF);   // blue   — low pressure gas
-    const lpl = Color(0xFF44DD88);   // green  — low pressure liquid
+    const hp  = Color(0xFFFF6600);
+    const hpl = Color(0xFFFFCC00);
+    const lp  = Color(0xFF44AAFF);
+    const lpl = Color(0xFF44DD88);
 
     return [
-      _point(t[0],  lp,  top: h * 0.035, left: w * 0.192),      // ① compressor inlet (blue)
-      _point(t[1],  hp,  top: h * 0.035, left: w * 0.4),        // ② compressor outlet
-      _point(t[2],  hp,  top: h * 0.035, left: w * 0.63),       // ③ discharge line
-      _point(t[3],  hpl, top: h * 0.148, right: w * 0.18),      // ④ condenser right liquid
-      _point(t[4],  hp,  top: h * 0.23, left: w * 0.3),       // ⑤ heat exchanger bottom
-      _point(t[5],  lp,  top: h * 0.282, left: w * 0.07),       // ⑥ left blue line
-      _point(t[6],  lp,  top: h * 0.275, left: w * 0.735),      // ⑦ LT compressor right
-      _point(t[7],  hp,  top: h * 0.255, left: w * 0.655),      // ⑧ above R-404A
-      _point(t[8],  hp,  top: h * 0.33, left: w * 0.38),       // ⑨ oil separator
-      _point(t[9],  lpl, top: h * 0.177, left: w * 0.26),        // ⑩ heat exchanger top
-      _point(t[10], hpl, top: h * 0.368, left: w * 0.296),      // ⑪ left yellow lower
-      _point(t[11], lpl, top: h * 0.416, left: w * 0.4),       // ⑫ expansion valve lower
-      _point(t[12], lp,  top: h * 0.433, right: w * 0.018),     // ⑬ PG1 right side
-      _point(t[13], lpl, top: h * 0.489, right: w * 0.109),     // ⑭ evaporator inside
-      _point(t[14], lpl, top: h * 0.554, right: w * 0.07),      // ⑮ evaporator bottom right
-      _point(t[15], hpl, top: h * 0.49, right: w * 0.88),       // ⑯ bottom left
+      _point(t[0],  lp,  top: h * 0.035, left: w * 0.192),
+      _point(t[1],  hp,  top: h * 0.035, left: w * 0.4),
+      _point(t[2],  hp,  top: h * 0.035, left: w * 0.63),
+      _point(t[3],  hpl, top: h * 0.148, right: w * 0.18),
+      _point(t[4],  hp,  top: h * 0.23,  left: w * 0.3),
+      _point(t[5],  lp,  top: h * 0.282, left: w * 0.07),
+      _point(t[6],  lp,  top: h * 0.275, left: w * 0.735),
+      _point(t[7],  hp,  top: h * 0.255, left: w * 0.655),
+      _point(t[8],  hp,  top: h * 0.33,  left: w * 0.38),
+      _point(t[9],  lpl, top: h * 0.177, left: w * 0.26),
+      _point(t[10], hpl, top: h * 0.368, left: w * 0.296),
+      _point(t[11], lpl, top: h * 0.416, left: w * 0.4),
+      _point(t[12], lp,  top: h * 0.433, right: w * 0.018),
+      _point(t[13], lpl, top: h * 0.489, right: w * 0.109),
+      _point(t[14], lpl, top: h * 0.554, right: w * 0.07),
+      _point(t[15], hpl, top: h * 0.49,  right: w * 0.88),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     final temps = _telemetry?.temps ?? List.filled(16, null);
-
     final connecting = _initialLoading && _telemetry == null;
 
     if (_noInternet) {
@@ -404,7 +397,7 @@ class _DataLoggerDashboardScreenState
           child: Column(
             children: [
 
-              /// 🔁 LAST SYNC + STATUS
+              // 🔁 LAST SYNC + STATUS
               connecting
                   ? blinkingConnecting()
                   : Row(
@@ -428,7 +421,7 @@ class _DataLoggerDashboardScreenState
 
               const SizedBox(height: 18),
 
-              /// 🌡️ SENSORS
+              // 🌡️ SENSORS
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),

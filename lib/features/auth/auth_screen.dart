@@ -359,24 +359,6 @@ class _AuthScreenState extends State<AuthScreen>
                                         ),
 
                                         const SizedBox(height: 12),
-
-                                        // ✅ Guest Button
-                                        _AuthButton(
-                                          text: "Continue as Guest",
-                                          loading: _loadingGuest,
-                                          onPressed: _loadingGoogle
-                                              ? null
-                                              : _onGuestPressed,
-                                          icon: Icon(
-                                            Icons.person_outline,
-                                            size: 22,
-                                            color: const Color(0xFF0F172A),
-                                          ),
-                                          filled: false,
-                                          
-                                        ),
-
-                                        const SizedBox(height: 12),
                                         _AuthButton(
                                           text: "Continue with Email",
                                           loading: false,
@@ -393,6 +375,24 @@ class _AuthScreenState extends State<AuthScreen>
                                           },
                                           icon: const Icon(Icons.email_outlined, size: 22, color: Color(0xFF0F172A)),
                                           filled: false,
+                                        ),
+
+                                        const SizedBox(height: 12),
+
+                                        // ✅ Guest Button
+                                        _AuthButton(
+                                          text: "Continue as Guest",
+                                          loading: _loadingGuest,
+                                          onPressed: _loadingGoogle
+                                              ? null
+                                              : _onGuestPressed,
+                                          icon: Icon(
+                                            Icons.person_outline,
+                                            size: 22,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                          filled: false,
+                                          
                                         ),
 
                                         const SizedBox(height: 14),
