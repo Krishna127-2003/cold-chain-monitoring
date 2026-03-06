@@ -240,19 +240,40 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>
 
           try {
             if (device.serviceType == 'DATA_LOGGER_ULT') {
-              // ✅ Datalogger: fetch 16-sensor data
-              final t = await AndroidDataApi.fetchDatalogger(id);
-              if (t != null) {
-                DataloggerTempStore.set(id, t.temps);
-                if (!_selectedSensors.containsKey(id)) {
-                  final indices = await SelectedSensorsStorage.load(id);
-                  if (mounted) {
-                    setState(() => _selectedSensors[id] = indices);
+                // Fetch 16-sensor temps
+                final t = await AndroidDataApi.fetchDatalogger(id);
+                if (t != null) {
+                  DataloggerTempStore.set(id, t.temps);
+                  if (!_selectedSensors.containsKey(id)) {
+                    final indices = await SelectedSensorsStorage.load(id);
+                    if (mounted) {
+                      setState(() => _selectedSensors[id] = indices);
+                    }
                   }
                 }
+
+                // ✅ ALSO fetch regular telemetry for health/online status
+                final telemetry = await AndroidDataApi.fetchByDeviceId(id);
+                if (telemetry != null) {
+                  if (!mounted) return;
+                  setState(() {
+                    TelemetryStore.set(id, telemetry);
+                  });
+
+                  await AlertManager.handleTelemetry(
+                    deviceId: id,
+                    equipmentType: device.serviceType,
+                    temperature: telemetry.pv,
+                    sv: telemetry.sv,
+                    batteryPercent: telemetry.battery,
+                    powerFail: !telemetry.powerOn,
+                    probeFail: !telemetry.probeOk,
+                    systemError: !telemetry.systemHealthy,
+                  );
+                }
+
                 if (mounted) setState(() {});
-              }
-            } else {
+              }else {
               // ✅ Normal device: existing logic
               final t = await AndroidDataApi.fetchByDeviceId(id);
               if (t != null) {
@@ -280,6 +301,10 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>
       );
     } finally {
       _tempsLoading = false;
+
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -347,7 +372,7 @@ class _AllDevicesScreenState extends State<AllDevicesScreen>
 
   String _systemStatus(String id) {
     final t = TelemetryStore.get(id);
-    if (t == null) return "--";
+    if (t == null) return "Loading...";
     return t.systemHealthy ? "HEALTHY" : "FAILURE";
   }
 

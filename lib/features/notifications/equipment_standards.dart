@@ -19,6 +19,9 @@ class EquipmentStandards {
 
       case "PLATELET":
         return const TempLimits(20, 24);
+      
+      case "DATA_LOGGER_ULT":
+        return const TempLimits(-90, 90);
 
       default:
         return const TempLimits(0, 8);

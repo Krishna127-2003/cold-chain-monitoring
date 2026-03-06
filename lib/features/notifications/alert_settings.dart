@@ -36,25 +36,24 @@ class AlertSettings {
   // ---------- DEFAULT SAFE VALUES ----------
   factory AlertSettings.defaultsForEquipment(String type) {
     final limits = EquipmentStandards.limitsFor(type);
+    final isDataLogger = type == "DATA_LOGGER_ULT";
 
     return AlertSettings(
       highTempEnabled: true,
       highTempThreshold: limits.max,
-
       lowTempEnabled: true,
       lowTempThreshold: limits.min,
 
-      batteryEnabled: true,
+      // disabled & irrelevant for data loggers
+      batteryEnabled: !isDataLogger,
       batteryBelowPercent: 25,
-
-      powerFailEnabled: true,
-      probeFailEnabled: true,
-      systemErrorEnabled: true,
+      powerFailEnabled: !isDataLogger,
+      probeFailEnabled: !isDataLogger,
+      systemErrorEnabled: !isDataLogger,
 
       triggerDelay: const Duration(minutes: 5),
     );
   }
-
   // ---------- JSON ----------
   Map<String, dynamic> toJson() => {
         "highTempEnabled": highTempEnabled,

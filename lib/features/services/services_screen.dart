@@ -195,20 +195,27 @@ class _ServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isSmall = width < 442;
+    final cardPad = isSmall ? 10.0 : 16.0;
+    final iconSize = isSmall ? 36.0 : 44.0;
+    final iconRadius = isSmall ? 10.0 : 14.0;
+
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(cardPad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                height: 44,
-                width: 44,
+                height: iconSize,
+                width: iconSize,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(iconRadius),
                   color: Theme.of(context)
                       .colorScheme
                       .primary
@@ -216,22 +223,36 @@ class _ServiceCard extends StatelessWidget {
                 ),
                 child: Icon(
                   icon,
+                  size: isSmall ? 18 : 22,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(title,
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-               Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall,
+              SizedBox(height: isSmall ? 6 : 12),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: isSmall ? 12 : null,
                 ),
-              const SizedBox(height: 8),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: isSmall ? 2 : 6),
+              Flexible(
+                child: Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: isSmall ? 10 : null,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(height: isSmall ? 4 : 8),
               Align(
                 alignment: Alignment.bottomRight,
                 child: Icon(
                   Icons.arrow_forward,
+                  size: isSmall ? 16 : 20,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),

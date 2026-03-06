@@ -10,6 +10,7 @@ import '../features/notifications/notification_settings_screen.dart';
 import '../features/devices/add_device/manual_entry_screen.dart';
 import '../features/devices/edit_device_screen.dart';
 import '../features/alerts_history/alert_history_screen.dart';
+import '../features/auth/email_auth_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -22,8 +23,9 @@ class AppRoutes {
   static const String allDevices = '/all-devices';
   static const String notificationSettings = '/notification-settings';
   static const String manualEntry = "/manualEntry"; 
-  static const editDevice = "/editDevice"; // 👈 ADD THIS
+  static const editDevice = "/editDevice";
   static const alertHistory = "/alert-history";
+  static const String emailAuth = '/email-auth'; 
 
   static Map<String, WidgetBuilder> get routes => {
         splash: (_) => const SplashScreen(),
@@ -37,5 +39,6 @@ class AppRoutes {
         manualEntry: (_) => const ManualEntryScreen(),   // ✅ NEW
         editDevice: (_) => const EditDeviceScreen(),
         alertHistory: (_) => const AlertHistoryScreen(),
+        emailAuth: (_) => const EmailAuthScreen(),
       };
 }

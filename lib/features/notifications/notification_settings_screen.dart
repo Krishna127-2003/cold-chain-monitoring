@@ -20,9 +20,10 @@ class _NotificationSettingsScreenState
   AlertSettings? _settings;
   late TempLimits _limits;
   late String _equipmentType;
+  bool get _isDataLogger => _equipmentType == "DATA_LOGGER_ULT";
 
   bool _saving = false;
-  bool _saved = false; // ✅ success indicator
+  bool _saved = false;
 
   @override
   void didChangeDependencies() {
@@ -37,6 +38,8 @@ class _NotificationSettingsScreenState
     if (_deviceId.isEmpty) _deviceId = "global";
 
     _equipmentType = (args?["equipmentType"] ?? "").toString();
+
+    debugPrint(">>> equipmentType received: '$_equipmentType'");
 
     _limits = EquipmentStandards.limitsFor(_equipmentType);
 
@@ -74,7 +77,6 @@ class _NotificationSettingsScreenState
       _saved = true;
     });
 
-    // show ✓ Saved for 1 second
     await Future.delayed(const Duration(seconds: 1));
 
     if (!mounted) return;
@@ -103,6 +105,7 @@ class _NotificationSettingsScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
+              // ================= TEMPERATURE =================
               const Text(
                 "Temperature Alerts",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -151,60 +154,67 @@ class _NotificationSettingsScreenState
 
               const SizedBox(height: 24),
 
-              const Text(
-                "Battery Alert",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+              // ================= BATTERY (hidden for DATA_LOGGER) =================
+              if (!_isDataLogger) ...[
+                const Text(
+                  "Battery Alert",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
 
-              SwitchListTile(
-                title: const Text("Enable Battery Alert"),
-                value: settings.batteryEnabled,
-                onChanged: (v) =>
-                    setState(() => settings.batteryEnabled = v),
-              ),
+                SwitchListTile(
+                  title: const Text("Enable Battery Alert"),
+                  value: settings.batteryEnabled,
+                  onChanged: (v) =>
+                      setState(() => settings.batteryEnabled = v),
+                ),
 
-              Text("Alert Below: ${settings.batteryBelowPercent}%"),
-              Slider(
-                min: 5,
-                max: 50,
-                divisions: 45,
-                value: settings.batteryBelowPercent.toDouble(),
-                onChanged: (v) =>
-                    setState(() => settings.batteryBelowPercent = v.round()),
-              ),
+                Text("Alert Below: ${settings.batteryBelowPercent}%"),
+                Slider(
+                  min: 5,
+                  max: 50,
+                  divisions: 45,
+                  value: settings.batteryBelowPercent.toDouble(),
+                  onChanged: (v) =>
+                      setState(() => settings.batteryBelowPercent = v.round()),
+                ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
 
-              const Text(
-                "System Failures",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+              // ================= SYSTEM FAILURES (hidden for DATA_LOGGER) =================
+              if (!_isDataLogger) ...[
+                const Text(
+                  "System Failures",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
 
-              SwitchListTile(
-                title: const Text("Power Failure"),
-                value: settings.powerFailEnabled,
-                onChanged: (v) =>
-                    setState(() => settings.powerFailEnabled = v),
-              ),
+                SwitchListTile(
+                  title: const Text("Power Failure"),
+                  value: settings.powerFailEnabled,
+                  onChanged: (v) =>
+                      setState(() => settings.powerFailEnabled = v),
+                ),
 
-              SwitchListTile(
-                title: const Text("Probe Failure"),
-                value: settings.probeFailEnabled,
-                onChanged: (v) =>
-                    setState(() => settings.probeFailEnabled = v),
-              ),
+                SwitchListTile(
+                  title: const Text("Probe Failure"),
+                  value: settings.probeFailEnabled,
+                  onChanged: (v) =>
+                      setState(() => settings.probeFailEnabled = v),
+                ),
 
-              SwitchListTile(
-                title: const Text("System Error"),
-                value: settings.systemErrorEnabled,
-                onChanged: (v) =>
-                    setState(() => settings.systemErrorEnabled = v),
-              ),
+                SwitchListTile(
+                  title: const Text("System Error"),
+                  value: settings.systemErrorEnabled,
+                  onChanged: (v) =>
+                      setState(() => settings.systemErrorEnabled = v),
+                ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
 
+              // ================= TRIGGER DELAY =================
               const Text(
                 "Trigger Delay",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -218,8 +228,7 @@ class _NotificationSettingsScreenState
                 divisions: 12,
                 value: settings.triggerDelay.inMinutes.toDouble(),
                 onChanged: (v) => setState(() =>
-                    settings.triggerDelay =
-                        Duration(minutes: v.round())),
+                    settings.triggerDelay = Duration(minutes: v.round())),
               ),
 
               const SizedBox(height: 30),
@@ -229,8 +238,7 @@ class _NotificationSettingsScreenState
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton.icon(
-                  onPressed:
-                      (_saving || _saved) ? null : _save,
+                  onPressed: (_saving || _saved) ? null : _save,
 
                   icon: _saving
                       ? const SizedBox(
@@ -239,8 +247,7 @@ class _NotificationSettingsScreenState
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : _saved
-                          ? const Icon(Icons.check_circle,
-                              color: Colors.green)
+                          ? const Icon(Icons.check_circle, color: Colors.green)
                           : const Icon(Icons.save),
 
                   label: Text(
@@ -256,15 +263,15 @@ class _NotificationSettingsScreenState
                   ),
 
                   style: OutlinedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black87,
                     side: BorderSide(color: Colors.grey.shade300),
                   ),
                 ),
               ),
-            ],
+
+            ],   // end of children
           ),
         ),
       ),

@@ -11,6 +11,7 @@ import 'data/session/session_manager.dart';
 import 'data/api/device_management_api.dart';
 import 'data/api/android_data_api.dart';
 import 'features/notifications/alert_manager.dart';
+import 'package:flutter/foundation.dart';
 
 final GlobalKey<ScaffoldMessengerState> _rootMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -71,28 +72,28 @@ Future<void> main() async {
     }
   } catch (_) {}
 
-
   await NotificationService.init();
   await NotificationService.requestPermission();
 
-  await Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false,
-  );
+  // ✅ Prevent Workmanager from running on Web
+  if (!kIsWeb) {
+    await Workmanager().initialize(
+      callbackDispatcher,
+      isInDebugMode: false,
+    );
 
-  await Workmanager().registerPeriodicTask(
-    "alert-worker",
-    "alert-worker",
-    frequency: const Duration(minutes: 15),
-
-    existingWorkPolicy: ExistingWorkPolicy.keep,
-
-    constraints: Constraints(
-      networkType: NetworkType.connected,
-      requiresBatteryNotLow: false,
-      requiresCharging: false,
-    ),
-  );
+    await Workmanager().registerPeriodicTask(
+      "alert-worker",
+      "alert-worker",
+      frequency: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingWorkPolicy.keep,
+      constraints: Constraints(
+        networkType: NetworkType.connected,
+        requiresBatteryNotLow: false,
+        requiresCharging: false,
+      ),
+    );
+  }
 
   runApp(const ColdChainApp());
 }
